@@ -1,0 +1,356 @@
+<?php
+
+namespace App\Jobs;
+
+use App\Services\LiveMatchSyncLogger;
+use Google\Cloud\Firestore\FirestoreClient;
+use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Foundation\Bus\Dispatchable;
+use Illuminate\Queue\InteractsWithQueue;
+use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\Http;
+use Throwable;
+
+class SyncLiveMatchesJob implements ShouldQueue
+{
+    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+
+    public int $timeout = 300;
+    public int $tries   = 5;
+
+    private ?FirestoreClient $firestore = null;
+    private ?string $apiKey    = null;
+    private string $apiHost;
+    private LiveMatchSyncLogger $logger;
+
+    /**
+     * @param string[] $matchIds
+     */
+    public function __construct(
+        private readonly array $matchIds = [],
+        private ?string $runId = null,
+    ) {}
+
+    public function handle(): void
+    {
+        $this->apiHost = config('services.cricbuzz.host', 'cricbuzz-cricket2.p.rapidapi.com');
+        $this->logger  = new LiveMatchSyncLogger($this->runId);
+        $this->runId   = $this->logger->runId;
+
+        $this->log('job_started', 'info', 'SyncLiveMatches job started', [
+            'matchIds' => $this->matchIds,
+            'timeout'  => $this->timeout,
+            'tries'    => $this->tries,
+        ]);
+
+        try {
+            $this->firestore = $this->initializeClients();
+            $this->log('initialize_clients', 'success', 'Firestore client initialised');
+        } catch (Throwable $e) {
+            $this->log('initialize_clients', 'error', 'Failed to initialise Firestore client', [
+                'exception' => $e->getMessage(),
+            ]);
+
+            throw $e;
+        }
+
+        $matches = $this->fetchLiveMatches();
+        if (empty($matches)) {
+            $this->log('live_matches_empty', 'warning', 'No live matches returned by API');
+            return;
+        }
+
+        $this->log('live_matches_fetched', 'info', 'Fetched live matches from API', [
+            'match_count' => count($matches),
+        ]);
+
+        $bulk = $this->firestore->bulkWriter([
+            'maxBatchSize'        => 100,
+            'initialOpsPerSecond' => 20,
+            'maxOpsPerSecond'     => 60,
+        ]);
+
+        $matchFilterSet = !empty($this->matchIds)
+            ? array_fill_keys(array_map(static fn ($id) => (string) $id, $this->matchIds), false)
+            : null;
+
+        $synced   = 0;
+        $skipped  = 0;
+        $failures = [];
+
+        foreach ($matches as $match) {
+            $matchInfo = $match['matchInfo'] ?? null;
+            if (!is_array($matchInfo)) {
+                $skipped++;
+                $this->log('match_skipped', 'warning', 'Match payload missing matchInfo block', [
+                    'payload_keys' => array_keys($match),
+                ]);
+                continue;
+            }
+
+            $matchId = (string) ($matchInfo['matchId'] ?? '');
+            if ($matchId === '') {
+                $skipped++;
+                $this->log('match_skipped', 'warning', 'Match info missing matchId', [
+                    'matchInfo_keys' => array_keys($matchInfo),
+                ]);
+                continue;
+            }
+
+            if ($matchFilterSet !== null) {
+                if (!array_key_exists($matchId, $matchFilterSet)) {
+                    $this->log('match_skipped', 'info', 'Match did not match provided filter', [
+                        'match_id' => $matchId,
+                    ]);
+                    continue;
+                }
+
+                $matchFilterSet[$matchId] = true;
+            }
+
+            try {
+                $preparedMatchInfo = $this->prepareMatchInfo($matchInfo);
+                $matchDocData      = $this->prepareMatchDocument($match, $preparedMatchInfo);
+
+                $matchRef = $this->firestore->collection('matches')->document($matchId);
+                $bulk->set($matchRef, $matchDocData, ['merge' => true]);
+
+                $infoRef = $this->firestore->collection('matchInfo')->document($matchId);
+                $bulk->set($infoRef, $preparedMatchInfo, ['merge' => true]);
+
+                $synced++;
+                $this->log('match_synced', 'success', 'Synced live match', [
+                    'match_id' => $matchId,
+                ]);
+            } catch (Throwable $e) {
+                $failures[] = $matchId;
+                $this->log('match_persist_failed', 'error', 'Failed to persist live match', [
+                    'match_id'  => $matchId,
+                    'exception' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        $bulk->flush(true);
+        $bulk->close();
+
+        if ($matchFilterSet !== null) {
+            $missing = array_keys(array_filter($matchFilterSet, static fn ($hit) => !$hit));
+            if (!empty($missing)) {
+                $this->log('match_filter_missing', 'warning', 'Provided match IDs not present in live feed', [
+                    'missing_match_ids' => $missing,
+                ]);
+            }
+        }
+
+        $this->log('job_completed', empty($failures) ? 'success' : 'warning', 'SyncLiveMatches job finished', [
+            'synced'   => $synced,
+            'skipped'  => $skipped,
+            'failures' => array_values(array_unique(array_filter($failures))),
+        ]);
+    }
+
+    private function initializeClients(): FirestoreClient
+    {
+        $keyPath   = config('services.firestore.sa_json');
+        $projectId = config('services.firestore.project_id');
+
+        if (!$projectId && $keyPath && is_file($keyPath)) {
+            $json      = json_decode(file_get_contents($keyPath), true);
+            $projectId = $json['project_id'] ?? null;
+        }
+
+        if (!$projectId) {
+            throw new \RuntimeException(
+                'Firestore project id missing. Set FIRESTORE_PROJECT_ID in .env or ensure your service account JSON has project_id.'
+            );
+        }
+
+        $options = ['projectId' => $projectId];
+        if ($keyPath && is_file($keyPath)) {
+            $options['keyFilePath'] = $keyPath;
+        }
+
+        $this->apiKey = config('services.cricbuzz.key');
+        if (!$this->apiKey) {
+            throw new \RuntimeException('Cricbuzz API key is not configured.');
+        }
+
+        return new FirestoreClient($options);
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function fetchLiveMatches(): array
+    {
+        $endpoint = sprintf('https://%s/matches/v1/live', $this->apiHost);
+
+        $headers = [
+            'x-rapidapi-host' => $this->apiHost,
+            'x-rapidapi-key'  => $this->apiKey,
+            'Content-Type'    => 'application/json; charset=UTF-8',
+        ];
+
+        try {
+            $response = Http::withHeaders($headers)->get($endpoint);
+        } catch (Throwable $e) {
+            $this->log('api_request_failed', 'error', 'Live matches request failed', [
+                'exception' => $e->getMessage(),
+            ]);
+            return [];
+        }
+
+        if (!$response->successful()) {
+            $this->log('api_response_error', 'error', 'API returned error while fetching live matches', [
+                'status' => $response->status(),
+                'body'   => $response->body(),
+            ]);
+            return [];
+        }
+
+        $payload = $response->json();
+        if (!is_array($payload)) {
+            $this->log('api_response_invalid', 'error', 'Live matches API returned invalid payload');
+            return [];
+        }
+
+        $matches = [];
+
+        $storeMatch = function (array $match) use (&$matches): void {
+            $matchInfo = $match['matchInfo'] ?? null;
+            $matchId   = null;
+
+            if (is_array($matchInfo) && isset($matchInfo['matchId'])) {
+                $matchId = (string) $matchInfo['matchId'];
+            }
+
+            if ($matchId !== null && $matchId !== '') {
+                $matches[$matchId] = $match;
+                return;
+            }
+
+            $matches[] = $match;
+        };
+
+        if (!empty($payload['matchDetails']) && is_array($payload['matchDetails'])) {
+            foreach ($payload['matchDetails'] as $detail) {
+                if (!isset($detail['matchDetailsMap']['match']) || !is_array($detail['matchDetailsMap']['match'])) {
+                    continue;
+                }
+
+                foreach ($detail['matchDetailsMap']['match'] as $match) {
+                    if (!is_array($match)) {
+                        continue;
+                    }
+
+                    $storeMatch($match);
+                }
+            }
+        }
+
+        if (!empty($payload['typeMatches']) && is_array($payload['typeMatches'])) {
+            foreach ($payload['typeMatches'] as $typeBlock) {
+                if (!is_array($typeBlock) || empty($typeBlock['seriesMatches']) || !is_array($typeBlock['seriesMatches'])) {
+                    continue;
+                }
+
+                foreach ($typeBlock['seriesMatches'] as $seriesMatch) {
+                    if (!is_array($seriesMatch)) {
+                        continue;
+                    }
+
+                    $containers = [];
+
+                    if (isset($seriesMatch['seriesAdWrapper']) && is_array($seriesMatch['seriesAdWrapper'])) {
+                        $containers[] = $seriesMatch['seriesAdWrapper'];
+                    } else {
+                        $containers[] = $seriesMatch;
+                    }
+
+                    foreach ($containers as $container) {
+                        if (!is_array($container) || empty($container['matches']) || !is_array($container['matches'])) {
+                            continue;
+                        }
+
+                        foreach ($container['matches'] as $match) {
+                            if (!is_array($match)) {
+                                continue;
+                            }
+
+                            $storeMatch($match);
+                        }
+                    }
+                }
+            }
+        }
+
+        $this->log('api_response_parsed', 'info', 'Parsed live matches payload', [
+            'raw_match_count' => count($matches),
+        ]);
+
+        return array_values($matches);
+    }
+
+    /**
+     * @param array<string, mixed> $matchInfo
+     * @return array<string, mixed>
+     */
+    private function prepareMatchInfo(array $matchInfo): array
+    {
+        $prepared = $matchInfo;
+
+        $prepared['matchId'] = (string) ($matchInfo['matchId'] ?? '');
+        if ($prepared['matchId'] === '') {
+            unset($prepared['matchId']);
+        }
+
+        if (isset($matchInfo['state']) && is_string($matchInfo['state'])) {
+            $prepared['state_lowercase'] = strtolower($matchInfo['state']);
+        }
+
+        foreach (['startDate', 'endDate', 'seriesStartDt', 'seriesEndDt'] as $timestampKey) {
+            if (isset($matchInfo[$timestampKey])) {
+                $prepared[$timestampKey] = (int) $matchInfo[$timestampKey];
+            }
+        }
+
+        return $prepared;
+    }
+
+    /**
+     * @param array<string, mixed> $match
+     * @param array<string, mixed> $preparedMatchInfo
+     * @return array<string, mixed>
+     */
+    private function prepareMatchDocument(array $match, array $preparedMatchInfo): array
+    {
+        $document              = $match;
+        $document['matchInfo'] = $preparedMatchInfo;
+        $document['updatedAt'] = now()->getTimestamp() * 1000;
+
+        if (isset($preparedMatchInfo['matchId'])) {
+            $document['matchId'] = $preparedMatchInfo['matchId'];
+        }
+
+        if (isset($preparedMatchInfo['seriesId'])) {
+            $document['seriesId'] = (int) $preparedMatchInfo['seriesId'];
+        }
+
+        if (isset($preparedMatchInfo['state_lowercase'])) {
+            $document['matchInfo']['state_lowercase'] = $preparedMatchInfo['state_lowercase'];
+        }
+
+        return $document;
+    }
+
+    private function log(string $action, ?string $status, string $message, array $context = []): void
+    {
+        if (!isset($this->logger)) {
+            return;
+        }
+
+        $this->logger->log($action, $status, $message, $context);
+    }
+}

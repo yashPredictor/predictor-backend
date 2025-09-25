@@ -2,118 +2,71 @@
 
 namespace App\Console\Commands;
 
-use Google\Cloud\Firestore\FirestoreClient;
+use App\Jobs\SyncLiveMatchesJob;
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
-use Throwable;
 
 class SyncLiveMatches extends Command
 {
-    /**
-     * The name and signature of the console command.
-     *
-     * @var string
-     */
-    protected $signature = 'matches:sync-live-firestore';
+    protected $signature = 'app:sync-live-matches {--matchId=* : Only sync the provided match IDs.}';
+    protected $description = 'Dispatches a queue job to sync live matches from Cricbuzz into Firestore.';
 
     /**
-     * The console command description.
-     *
-     * @var string
+     * @return string[]
      */
-    protected $description = 'Syncs live match details from Cricbuzz API to Google Firestore.';
-    protected $firestore;
-    
-    public function __construct()
+    private function normalizeOptionValues(string $optionName): array
     {
-        parent::__construct();
+        $raw = $this->option($optionName);
+        $values = is_array($raw) ? $raw : ($raw === null ? [] : [$raw]);
 
-        try {
-            $this->firestore = new FirestoreClient([
-                'projectId' => config('services.firestore.project_id'),
-            ]);
-        } catch (\Exception $e) {
-            Log::emergency('Could not connect to Firestore: ' . $e->getMessage());
-            $this->error('Could not connect to Firestore. Check your configuration and credentials.');
-            exit(1);
+        $normalized = [];
+
+        $flatten = function ($value) use (&$flatten, &$normalized) {
+            if (is_array($value)) {
+                foreach ($value as $nested) {
+                    $flatten($nested);
+                }
+                return;
+            }
+
+            $stringValue = trim((string) $value);
+            if ($stringValue === '') {
+                return;
+            }
+
+            foreach (preg_split('/[\s,]+/', $stringValue, -1, PREG_SPLIT_NO_EMPTY) as $part) {
+                $normalized[] = $part;
+            }
+        };
+
+        foreach ($values as $value) {
+            $flatten($value);
         }
+
+        return array_values(array_unique($normalized));
     }
 
-    public function handle()
+    public function handle(): int
     {
-        Log::info('Cron Job (Laravel): Starting live matches sync to Firestore...');
-        $this->info('Starting live matches sync to Firestore...');
+        $matchIds = $this->normalizeOptionValues('matchId');
+        $runId    = (string) Str::uuid();
 
-        $liveStates = [
-            "live", "inprogress", "stumps", "lunch", "drinks", 
-            "innings break", "in progress", "delay", "toss delay"
-        ];
-        
-        $matchesCollection = $this->firestore->collection('matches');
-        
-        // Firestore से लाइव मैचों की क्वेरी करें
-        $query = $matchesCollection->where('matchInfo.state_lowercase', 'in', $liveStates);
-        $documents = $query->documents();
+        SyncLiveMatchesJob::dispatch($matchIds, $runId);
 
-        $matchesToSync = iterator_to_array($documents);
-
-        if (empty($matchesToSync)) {
-            Log::info('Cron Job (Laravel): No live matches to update in Firestore.');
-            $this->info('No live matches to update.');
-            return 0;
+        if (empty($matchIds)) {
+            $message = 'Live matches sync job queued for all live matches.';
+        } else {
+            $message = 'Live matches sync job queued for match IDs: ' . implode(', ', $matchIds) . '.';
         }
 
-        $count = count($matchesToSync);
+        $this->info($message . " Run ID: {$runId}");
 
-        $this->info("Found {$count} live matches to update.");
+        Log::info('SYNC-LIVE-MATCHES: ' . $message, [
+            'run_id'    => $runId,
+            'match_ids' => $matchIds,
+        ]);
 
-        $apiKey = config('services.cricbuzz.key');
-        $apiHost = 'cricbuzz-cricket2.p.rapidapi.com';
-
-        foreach ($matchesToSync as $document) {
-            $matchData = $document->data();
-            $matchId = $matchData['matchInfo']['matchId'] ?? null;
-
-            if (!$matchId) {
-                Log::warning('Skipping document without a matchId.', ['document_id' => $document->id()]);
-                continue;
-            }
-
-            try {
-                $response = Http::withHeaders([
-                    'x-rapidapi-host' => $apiHost,
-                    'x-rapidapi-key' => $apiKey,
-                ])->get("https://{$apiHost}/mcenter/v1/{$matchId}");
-
-                if ($response->successful()) {
-                    $apiData = $response->json();
-
-                    if ($apiData && !empty($apiData)) {
-                        $matchDocRef = $matchesCollection->document($matchId);
-                        
-                        $finalData = array_merge($matchData, $apiData);
-                        
-                        $matchDocRef->set($finalData, ['merge' => true]);
-
-                        Log::info("Successfully updated details for live match {$matchId} in Firestore.");
-                        $this->info("Updated match in Firestore: {$matchId}");
-                    } else {
-                         Log::warning("Received empty response from API for match {$matchId}.");
-                    }
-                } else {
-                    Log::error("Failed to fetch details for match {$matchId}. Status: " . $response->status());
-                }
-
-            } catch (\Exception $e) {
-                Log::error("Exception while syncing match {$matchId}: " . $e->getMessage());
-            }
-        }
-
-        Log::info("Cron Job (Laravel): Finished live matches sync to Firestore.");
-        $this->info('Live matches sync finished.');
         return 0;
     }
-
 }

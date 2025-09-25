@@ -2,14 +2,15 @@
 
 namespace App\Console\Commands;
 
-use App\Jobs\SyncSeriesDataJob;
+use App\Jobs\SyncMatchOversJob;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
-class SyncSeriesData extends Command
+class SyncMatchOvers extends Command
 {
-    protected $signature = 'app:sync-series {--seriesId=*} {--matchId=*}';
-    protected $description = 'Fetches all series and their matches from Cricbuzz API and stores them in Firestore.';
+    protected $signature = 'match-overs:sync {--matchId=* : Sync match overs for specific match IDs only.}';
+    protected $description = 'Dispatches a queue job to pull match overs data from Cricbuzz and store it in Firestore.';
 
     /**
      * @return string[]
@@ -29,7 +30,7 @@ class SyncSeriesData extends Command
                 return;
             }
 
-            $stringValue = trim((string)$value);
+            $stringValue = trim((string) $value);
             if ($stringValue === '') {
                 return;
             }
@@ -48,15 +49,24 @@ class SyncSeriesData extends Command
 
     public function handle(): int
     {
-        $seriesIds = $this->normalizeOptionValues('seriesId');
-        $matchIds  = $this->normalizeOptionValues('matchId');
+        $matchIds = $this->normalizeOptionValues('matchId');
+        $runId    = (string) Str::uuid();
 
-        $runId = (string) Str::uuid();
-        SyncSeriesDataJob::dispatch($seriesIds, $matchIds, $runId);
+        SyncMatchOversJob::dispatch($matchIds, $runId);
 
-        $this->info("Series sync job queued. Run ID: {$runId}");
+        if (empty($matchIds)) {
+            $message = 'Match overs sync job queued for all live matches.';
+        } else {
+            $message = 'Match overs sync job queued for match IDs: ' . implode(', ', $matchIds) . '.';
+        }
+
+        $this->info($message . " Run ID: {$runId}");
+
+        Log::info('SYNC-MATCH-OVERS: ' . $message, [
+            'run_id'    => $runId,
+            'match_ids' => $matchIds,
+        ]);
 
         return 0;
     }
-
 }

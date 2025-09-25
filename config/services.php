@@ -35,13 +35,13 @@ return [
         ],
     ],
 
-    'firestore' => [
-        'project_id' => env('FIRESTORE_PROJECT_ID'),
-        'users_collection' => env('FIRESTORE_USERS_COLLECTION', 'users'),
-        'credentials_path' => env('FIRESTORE_CREDENTIALS_PATH'),
+    'cricbuzz' => [
+        'key'  => env('CRICBUZZ_API_KEY'),
+        'host' => env('CRICBUZZ_API_HOST', 'cricbuzz-cricket2.p.rapidapi.com'),
     ],
 
-    'cricbuzz' => [
-        'key' => '882e7dea87msh3941deedb372518p1f9bd2jsn0df3f707ebeb'
-    ]
+    'firestore' => [
+        'project_id' => env('FIRESTORE_PROJECT_ID'),
+        'sa_json'    => env('FIRESTORE_SA_JSON'),
+    ],
 ];

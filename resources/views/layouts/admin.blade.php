@@ -139,6 +139,10 @@
 
         .main-header {
             padding: 28px 36px 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 16px;
         }
 
         .main-header h1 {
@@ -151,6 +155,20 @@
             margin: 12px 0 0;
             color: var(--text-muted);
             max-width: 720px;
+        }
+
+        .logout-form {
+            margin: 0;
+        }
+
+        .logout-button {
+            border: 1px solid rgba(148, 163, 184, 0.25);
+            background: rgba(15, 118, 110, 0.25);
+            color: var(--text-primary);
+            border-radius: 999px;
+            padding: 8px 16px;
+            font-size: 0.85rem;
+            cursor: pointer;
         }
 
         .content {
@@ -562,10 +580,18 @@
     </aside>
     <main class="main">
         <header class="main-header">
-            <h1>{{ $pageTitle ?? 'Cron Analytics' }}</h1>
-            @isset($pageIntro)
-                <p>{{ $pageIntro }}</p>
-            @endisset
+            <div>
+                <h1>{{ $pageTitle ?? 'Cron Analytics' }}</h1>
+                @isset($pageIntro)
+                    <p>{{ $pageIntro }}</p>
+                @endisset
+            </div>
+            @auth
+                <form method="POST" action="{{ route('admin.logout') }}" class="logout-form">
+                    @csrf
+                    <button type="submit" class="logout-button">Log out</button>
+                </form>
+            @endauth
         </header>
         <section class="content">
             @yield('content')

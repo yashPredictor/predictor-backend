@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Services\LiveMatchSyncLogger;
+use App\Support\Logging\ApiLogging;
 use Google\Cloud\Firestore\FirestoreClient;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -14,7 +15,7 @@ use Throwable;
 
 class SyncLiveMatchesJob implements ShouldQueue
 {
-    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels, ApiLogging;
 
     public int $timeout = 300;
     public int $tries   = 5;
@@ -48,21 +49,22 @@ class SyncLiveMatchesJob implements ShouldQueue
             $this->firestore = $this->initializeClients();
             $this->log('initialize_clients', 'success', 'Firestore client initialised');
         } catch (Throwable $e) {
-            $this->log('initialize_clients', 'error', 'Failed to initialise Firestore client', [
-                'exception' => $e->getMessage(),
-            ]);
+            $this->log('initialize_clients', 'error', 'Failed to initialise Firestore client', $this->exceptionContext($e));
 
             throw $e;
         }
 
         $matches = $this->fetchLiveMatches();
         if (empty($matches)) {
-            $this->log('live_matches_empty', 'warning', 'No live matches returned by API');
+            $this->log('live_matches_empty', 'warning', 'No live matches returned by API', [
+                'requested_ids' => $this->matchIds,
+            ]);
             return;
         }
 
         $this->log('live_matches_fetched', 'info', 'Fetched live matches from API', [
             'match_count' => count($matches),
+            'match_ids'   => array_map(static fn ($match) => $match['matchInfo']['matchId'] ?? null, $matches),
         ]);
 
         $bulk = $this->firestore->bulkWriter([
@@ -85,6 +87,7 @@ class SyncLiveMatchesJob implements ShouldQueue
                 $skipped++;
                 $this->log('match_skipped', 'warning', 'Match payload missing matchInfo block', [
                     'payload_keys' => array_keys($match),
+                    'raw_payload'  => $match,
                 ]);
                 continue;
             }
@@ -94,6 +97,7 @@ class SyncLiveMatchesJob implements ShouldQueue
                 $skipped++;
                 $this->log('match_skipped', 'warning', 'Match info missing matchId', [
                     'matchInfo_keys' => array_keys($matchInfo),
+                    'matchInfo'      => $matchInfo,
                 ]);
                 continue;
             }
@@ -121,14 +125,16 @@ class SyncLiveMatchesJob implements ShouldQueue
 
                 $synced++;
                 $this->log('match_synced', 'success', 'Synced live match', [
-                    'match_id' => $matchId,
+                    'match_id'    => $matchId,
+                    'match_doc'   => $matchDocData,
+                    'match_info'  => $preparedMatchInfo,
                 ]);
             } catch (Throwable $e) {
                 $failures[] = $matchId;
-                $this->log('match_persist_failed', 'error', 'Failed to persist live match', [
-                    'match_id'  => $matchId,
-                    'exception' => $e->getMessage(),
-                ]);
+                $this->log('match_persist_failed', 'error', 'Failed to persist live match', $this->exceptionContext($e, [
+                    'match_id'   => $matchId,
+                    'match_doc'  => $match,
+                ]));
             }
         }
 
@@ -140,14 +146,16 @@ class SyncLiveMatchesJob implements ShouldQueue
             if (!empty($missing)) {
                 $this->log('match_filter_missing', 'warning', 'Provided match IDs not present in live feed', [
                     'missing_match_ids' => $missing,
+                    'requested_ids'     => $this->matchIds,
                 ]);
             }
         }
 
         $this->log('job_completed', empty($failures) ? 'success' : 'warning', 'SyncLiveMatches job finished', [
-            'synced'   => $synced,
-            'skipped'  => $skipped,
-            'failures' => array_values(array_unique(array_filter($failures))),
+            'synced'        => $synced,
+            'skipped'       => $skipped,
+            'failures'      => array_values(array_unique(array_filter($failures))),
+            'requested_ids' => $this->matchIds,
         ]);
     }
 
@@ -196,23 +204,24 @@ class SyncLiveMatchesJob implements ShouldQueue
         try {
             $response = Http::withHeaders($headers)->get($endpoint);
         } catch (Throwable $e) {
-            $this->log('api_request_failed', 'error', 'Live matches request failed', [
-                'exception' => $e->getMessage(),
-            ]);
+            $this->log('api_request_failed', 'error', 'Live matches request failed', $this->exceptionContext($e, [
+                'endpoint' => $endpoint,
+            ]));
             return [];
         }
 
         if (!$response->successful()) {
-            $this->log('api_response_error', 'error', 'API returned error while fetching live matches', [
-                'status' => $response->status(),
-                'body'   => $response->body(),
-            ]);
+            $this->log('api_response_error', 'error', 'API returned error while fetching live matches', $this->responseContext($response, [
+                'endpoint' => $endpoint,
+            ]));
             return [];
         }
 
         $payload = $response->json();
         if (!is_array($payload)) {
-            $this->log('api_response_invalid', 'error', 'Live matches API returned invalid payload');
+            $this->log('api_response_invalid', 'error', 'Live matches API returned invalid payload', $this->responseContext($response, [
+                'endpoint' => $endpoint,
+            ]));
             return [];
         }
 
@@ -288,6 +297,7 @@ class SyncLiveMatchesJob implements ShouldQueue
 
         $this->log('api_response_parsed', 'info', 'Parsed live matches payload', [
             'raw_match_count' => count($matches),
+            'payload'         => $payload,
         ]);
 
         return array_values($matches);
@@ -328,7 +338,7 @@ class SyncLiveMatchesJob implements ShouldQueue
     {
         $document              = $match;
         $document['matchInfo'] = $preparedMatchInfo;
-        $document['updatedAt'] = now()->getTimestamp() * 1000;
+        $document['updatedAt'] = now()->valueOf();
 
         if (isset($preparedMatchInfo['matchId'])) {
             $document['matchId'] = $preparedMatchInfo['matchId'];

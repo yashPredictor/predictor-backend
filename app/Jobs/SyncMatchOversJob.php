@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Services\MatchOversSyncLogger;
+use App\Support\Logging\ApiLogging;
 use Google\Cloud\Firestore\FirestoreClient;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -15,7 +16,7 @@ use Throwable;
 
 class SyncMatchOversJob implements ShouldQueue
 {
-    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels, ApiLogging;
 
     public int $timeout = 600;
     public int $tries   = 5;
@@ -66,9 +67,7 @@ class SyncMatchOversJob implements ShouldQueue
             $this->firestore = $this->initializeClients();
             $this->log('initialize_clients', 'success', 'Firestore client initialised');
         } catch (Throwable $e) {
-            $this->log('initialize_clients', 'error', 'Failed to initialise Firestore client', [
-                'exception' => $e->getMessage(),
-            ]);
+            $this->log('initialize_clients', 'error', 'Failed to initialise Firestore client', $this->exceptionContext($e));
 
             throw $e;
         }
@@ -76,12 +75,15 @@ class SyncMatchOversJob implements ShouldQueue
         $this->targetMatchIds = $this->resolveMatchIds();
 
         if (empty($this->targetMatchIds)) {
-            $this->log('no_matches', 'warning', 'No live matches found for overs sync');
+            $this->log('no_matches', 'warning', 'No live matches found for overs sync', [
+                'requested_ids' => $this->matchIds,
+            ]);
             return;
         }
 
         $this->log('matches_resolved', 'info', 'Resolved live matches for overs sync', [
             'match_count' => count($this->targetMatchIds),
+            'match_ids'   => $this->targetMatchIds,
         ]);
 
         $headers = $this->getHeaders();
@@ -108,10 +110,10 @@ class SyncMatchOversJob implements ShouldQueue
             } catch (Throwable $e) {
                 foreach ($chunk as $matchId) {
                     $failures[] = $matchId;
-                    $this->log('overs_fetch_failed', 'error', 'Failed to fetch overs batch', [
-                        'match_id'  => $matchId,
-                        'exception' => $e->getMessage(),
-                    ]);
+                    $this->log('overs_fetch_failed', 'error', 'Failed to fetch overs batch', $this->exceptionContext($e, [
+                        'match_id' => $matchId,
+                        'url'      => $this->baseUrl . $matchId . '/overs',
+                    ]));
                 }
                 continue;
             }
@@ -122,54 +124,63 @@ class SyncMatchOversJob implements ShouldQueue
                     $failures[] = $matchId;
                     $this->log('overs_fetch_missing', 'error', 'No response received for overs request', [
                         'match_id' => $matchId,
+                        'url'      => $this->baseUrl . $matchId . '/overs',
                     ]);
                     continue;
                 }
 
                 if (!$response->successful()) {
                     $failures[] = $matchId;
-                    $this->log('overs_fetch_error', 'error', 'Cricbuzz API returned error while fetching overs', [
+                    $this->log('overs_fetch_error', 'error', 'Cricbuzz API returned error while fetching overs', $this->responseContext($response, [
                         'match_id' => $matchId,
-                        'status'   => $response->status(),
-                        'body'     => $response->body(),
-                    ]);
+                        'url'      => $this->baseUrl . $matchId . '/overs',
+                    ]));
                     continue;
                 }
 
                 $oversData = $response->json();
                 if (!is_array($oversData)) {
                     $failures[] = $matchId;
-                    $this->log('overs_fetch_invalid', 'error', 'Match overs API returned invalid payload', [
+                    $this->log('overs_fetch_invalid', 'error', 'Match overs API returned invalid payload', $this->responseContext($response, [
                         'match_id' => $matchId,
-                    ]);
+                        'url'      => $this->baseUrl . $matchId . '/overs',
+                    ]));
                     continue;
                 }
 
                 if (!$this->shouldPersistOvers($oversData)) {
                     $this->log('overs_skipped', 'info', 'Overs payload did not contain expected keys', [
-                        'match_id' => $matchId,
-                        'keys'     => array_keys($oversData),
+                        'match_id'      => $matchId,
+                        'present_keys'  => array_keys($oversData),
+                        'expected_keys' => ['miniscore', 'comms', 'commsBkp', 'comwrapper'],
+                        'payload'       => $oversData,
                     ]);
                     continue;
                 }
 
                 try {
-                    $docRef = $this->firestore->collection('matchOvers')->document($matchId);
+                    $docRef       = $this->firestore->collection('matchOvers')->document($matchId);
+                    $apiUpdatedAt = (int) ($oversData['responselastupdated']
+                        ?? ($oversData['miniscore']['responselastupdated'] ?? 0));
                     $bulk->set($docRef, [
-                        'oversData'   => $oversData,
-                        'lastFetched' => now()->timestamp,
+                        'oversData'      => $oversData,
+                        'apiUpdatedAt'   => $apiUpdatedAt,
+                        'serverTime'     => now()->toIso8601String(),
+                        'lastFetched'    => now()->valueOf(),
                     ], ['merge' => true]);
 
                     $synced++;
                     $this->log('overs_synced', 'success', 'Stored overs in Firestore', [
-                        'match_id' => $matchId,
+                        'match_id'     => $matchId,
+                        'overs_data'   => $oversData,
+                        'apiUpdatedAt' => $apiUpdatedAt,
                     ]);
                 } catch (Throwable $e) {
                     $failures[] = $matchId;
-                    $this->log('overs_persist_failed', 'error', 'Failed to persist overs to Firestore', [
-                        'match_id'  => $matchId,
-                        'exception' => $e->getMessage(),
-                    ]);
+                    $this->log('overs_persist_failed', 'error', 'Failed to persist overs to Firestore', $this->exceptionContext($e, [
+                        'match_id'   => $matchId,
+                        'overs_data' => $oversData,
+                    ]));
                 }
             }
         }
@@ -187,6 +198,7 @@ class SyncMatchOversJob implements ShouldQueue
             'matches_considered' => count($this->targetMatchIds),
             'synced'             => $synced,
             'failures'           => array_values(array_unique($failures)),
+            'requested_ids'      => $this->matchIds,
         ]);
     }
 
@@ -228,6 +240,7 @@ class SyncMatchOversJob implements ShouldQueue
             $resolved = array_values(array_unique(array_map(static fn ($id) => (string) $id, $this->matchIds)));
             $this->log('match_ids_provided', 'info', 'Using provided match IDs for overs sync', [
                 'match_count' => count($resolved),
+                'match_ids'   => $resolved,
             ]);
             return $resolved;
         }
@@ -245,9 +258,7 @@ class SyncMatchOversJob implements ShouldQueue
 
             $documents = $query->documents();
         } catch (Throwable $e) {
-            $this->log('match_id_query_failed', 'error', 'Failed to query live matches from Firestore', [
-                'exception' => $e->getMessage(),
-            ]);
+            $this->log('match_id_query_failed', 'error', 'Failed to query live matches from Firestore', $this->exceptionContext($e));
             return [];
         }
 
@@ -259,8 +270,14 @@ class SyncMatchOversJob implements ShouldQueue
 
             $ids[] = $snapshot->id();
         }
+        $discovered = array_values(array_unique($ids));
 
-        return array_values(array_unique($ids));
+        $this->log('match_ids_discovered', 'info', 'Discovered match IDs from Firestore', [
+            'match_ids'   => $discovered,
+            'match_count' => count($discovered),
+        ]);
+
+        return $discovered;
     }
 
     /**

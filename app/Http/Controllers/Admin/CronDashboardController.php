@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\LiveMatchSyncLog;
 use App\Models\MatchOversSyncLog;
-use App\Models\MatchInfoSyncLog;
 use App\Models\SeriesSyncLog;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;

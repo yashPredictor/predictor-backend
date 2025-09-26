@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Services\SeriesSyncLogger;
+use App\Support\Logging\ApiLogging;
 use Google\Cloud\Firestore\FirestoreClient;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -15,7 +16,7 @@ use Throwable;
 
 class SyncSeriesDataJob implements ShouldQueue
 {
-    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels, ApiLogging;
 
     private const API_BASE_URL_SERIES = 'https://cricbuzz-cricket2.p.rapidapi.com/series/v1/';
 
@@ -57,8 +58,8 @@ class SyncSeriesDataJob implements ShouldQueue
         try {
             $this->firestore = $this->initializeClients();
         } catch (Throwable $e) {
-            $this->recordFailure('initialize_clients', $e->getMessage());
-            $this->finalize('failed');
+            $this->recordFailure('initialize_clients', 'Failed to bootstrap Firestore client(s)', [], $e);
+            $this->finalize('error');
             return;
         }
 
@@ -86,14 +87,16 @@ class SyncSeriesDataJob implements ShouldQueue
         if (empty($this->seriesIds) && empty($this->matchIds)) {
             try {
                 $metadataRef->set([
-                    'lastMatchesFetched' => now()->getTimestamp() * 1000,
+                    'lastMatchesFetched' => now()->valueOf(),
                     'matchCount'         => $matchesSynced,
                 ], ['merge' => true]);
                 $this->logger->log('metadata_update', 'success', 'Updated matches metadata', [
                     'matchesSynced' => $matchesSynced,
                 ]);
             } catch (Throwable $e) {
-                $this->recordFailure('metadata_update', $e->getMessage());
+                $this->recordFailure('metadata_update', 'Failed to refresh matches metadata document', [
+                    'document' => 'seriesMetadata/matches',
+                ], $e);
             }
         }
 
@@ -142,19 +145,24 @@ class SyncSeriesDataJob implements ShouldQueue
                 $matchSnapshot = $this->firestore->collection('matches')->document((string) $matchId)->snapshot();
             } catch (Throwable $e) {
                 $this->recordFailure('series_lookup', "Failed to fetch match {$matchId} from Firestore", [
-                    'exception' => $e->getMessage(),
-                ]);
+                    'match_id' => $matchId,
+                ], $e);
                 continue;
             }
 
             if (!$matchSnapshot->exists()) {
-                $this->recordFailure('series_lookup', "Match {$matchId} not found in Firestore", []);
+                $this->recordFailure('series_lookup', "Match {$matchId} not found in Firestore", [
+                    'match_id' => $matchId,
+                ]);
                 continue;
             }
 
             $seriesFromMatch = $matchSnapshot->data()['seriesId'] ?? null;
             if ($seriesFromMatch === null || $seriesFromMatch === '') {
-                $this->recordFailure('series_lookup', "Series ID missing for match {$matchId}");
+                $this->recordFailure('series_lookup', "Series ID missing for match {$matchId}", [
+                    'match_id'      => $matchId,
+                    'match_payload' => $matchSnapshot->data(),
+                ]);
                 continue;
             }
 
@@ -187,9 +195,10 @@ class SyncSeriesDataJob implements ShouldQueue
 
             $json = $response->json();
             if (!$response->successful() || !isset($json['seriesMapProto'])) {
-                $this->recordFailure('series_fetch', "Invalid response for series type {$type}", [
-                    'status' => $response->status(),
-                ]);
+                $this->recordFailure('series_fetch', "Invalid response for series type {$type}", $this->responseContext($response, [
+                    'series_type' => $type,
+                    'url'         => self::API_BASE_URL_SERIES . $type,
+                ]));
                 continue;
             }
 
@@ -202,7 +211,8 @@ class SyncSeriesDataJob implements ShouldQueue
                     $sid = (string) ($series['id'] ?? '');
                     if ($sid === '') {
                         $this->recordFailure('series_store', 'Encountered series without ID', [
-                            'series' => $series,
+                            'series_payload' => $series,
+                            'series_type'    => $type,
                         ]);
                         $this->seriesFailed++;
                         continue;
@@ -229,7 +239,8 @@ class SyncSeriesDataJob implements ShouldQueue
                         $this->seriesStored++;
                         $processedSeries[$sid] = true;
                         $this->logger->log('series_store', 'success', "Stored series {$sid}", [
-                            'category' => $type,
+                            'category'       => $type,
+                            'series_payload' => $seriesWithCategory,
                         ]);
 
                         if ($seriesTargetSet !== null) {
@@ -242,8 +253,9 @@ class SyncSeriesDataJob implements ShouldQueue
                     } catch (Throwable $e) {
                         $this->seriesFailed++;
                         $this->recordFailure('series_store', "Failed to store series {$sid}", [
-                            'exception' => $e->getMessage(),
-                        ]);
+                            'series_payload' => $seriesWithCategory,
+                            'series_type'    => $type,
+                        ], $e);
                     }
                 }
             }
@@ -255,14 +267,16 @@ class SyncSeriesDataJob implements ShouldQueue
         if (empty($this->seriesIds) && empty($matchIdsForProcessing)) {
             try {
                 $metadataRef->set([
-                    'lastFetched' => now()->getTimestamp() * 1000,
+                    'lastFetched' => now()->valueOf(),
                     'seriesCount' => $this->seriesStored,
                 ], ['merge' => true]);
                 $this->logger->log('metadata_update', 'success', 'Updated series metadata', [
                     'seriesStored' => $this->seriesStored,
                 ]);
             } catch (Throwable $e) {
-                $this->recordFailure('metadata_update', $e->getMessage());
+                $this->recordFailure('metadata_update', 'Failed to refresh series metadata document', [
+                    'document' => 'seriesMetadata/series',
+                ], $e);
             }
         }
 
@@ -319,9 +333,10 @@ class SyncSeriesDataJob implements ShouldQueue
 
             $json = $response->json();
             if (!$response->successful() || !isset($json['matchDetails'])) {
-                $this->recordFailure('match_fetch', "Invalid response for series {$seriesId}", [
-                    'status' => $response->status(),
-                ]);
+                $this->recordFailure('match_fetch', "Invalid response for series {$seriesId}", $this->responseContext($response, [
+                    'series_id' => $seriesId,
+                    'category'  => $category,
+                ]));
                 continue;
             }
 
@@ -339,7 +354,9 @@ class SyncSeriesDataJob implements ShouldQueue
                     $matchId = (string) ($matchInfo['matchId'] ?? '');
                     if ($matchId === '') {
                         $this->recordFailure('match_store', 'Encountered match without ID', [
-                            'seriesId' => $seriesId,
+                            'series_id'     => $seriesId,
+                            'category'      => $category,
+                            'match_payload' => $match,
                         ]);
                         $this->matchesFailed++;
                         continue;
@@ -380,14 +397,17 @@ class SyncSeriesDataJob implements ShouldQueue
                         $bulk->set($matchRef, $matchWithMeta, ['merge' => true]);
                         $this->matchesStored++;
                         $this->logger->log('match_store', 'success', "Stored match {$matchId}", [
-                            'seriesId' => $seriesId,
+                            'series_id'    => $seriesId,
+                            'category'     => $category,
+                            'match_payload'=> $matchWithMeta,
                         ]);
                     } catch (Throwable $e) {
                         $this->matchesFailed++;
                         $this->recordFailure('match_store', "Failed to store match {$matchId}", [
-                            'seriesId'  => $seriesId,
-                            'exception' => $e->getMessage(),
-                        ]);
+                            'series_id'     => $seriesId,
+                            'category'      => $category,
+                            'match_payload' => $match,
+                        ], $e);
                     }
                 }
             }
@@ -428,32 +448,46 @@ class SyncSeriesDataJob implements ShouldQueue
             ])->get($url);
 
             $this->apiCallCount++;
-
-            $this->logger->log('api_call', $response->successful() ? 'success' : 'failed', "GET {$url}", [
-                'status' => $response->status(),
+            $context = $this->responseContext($response, [
                 'action' => $action,
+                'url'    => $url,
             ]);
+
+            if (!$response->successful()) {
+                $this->recordFailure('api_call', "GET {$url} returned {$response->status()}", $context);
+                return null;
+            }
+
+            $this->logger->log('api_call', 'success', "GET {$url}", $context);
 
             return $response;
         } catch (Throwable $e) {
             $this->apiCallCount++;
-            $this->recordFailure('api_call', "GET {$url} threw an exception", [
-                'action'    => $action,
-                'exception' => $e->getMessage(),
+            $context = $this->exceptionContext($e, [
+                'action' => $action,
+                'url'    => $url,
             ]);
+            $this->recordFailure('api_call', "GET {$url} threw an exception", $context, $e);
 
             return null;
         }
     }
 
-    private function recordFailure(string $action, string $message, array $context = []): void
+    private function recordFailure(string $action, string $message, array $context = [], ?Throwable $exception = null): void
     {
+        if ($exception !== null) {
+            $context = $this->exceptionContext($exception, $context);
+        }
+
+        $context = array_merge(['action' => $action], $context);
+
         $this->failures[] = [
             'action'  => $action,
             'message' => $message,
+            'context' => $context,
         ];
 
-        $this->logger->log($action, 'failed', $message, $context);
+        $this->logger->log($action, 'error', $message, $context);
     }
 
     private function finalize(string $status): void

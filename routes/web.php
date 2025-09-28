@@ -21,3 +21,15 @@ Route::prefix('admin-yash')->name('admin.')->group(function () {
         Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
     });
 });
+
+Route::fallback(function () {
+    $route = auth()->check() ? 'admin.dashboard' : 'admin.login';
+
+    return redirect()
+        ->route($route)
+        ->with('toast', [
+            'type'    => 'warning',
+            'message' => 'Event not found',
+            'emoji'   => '🚫',
+        ]);
+});

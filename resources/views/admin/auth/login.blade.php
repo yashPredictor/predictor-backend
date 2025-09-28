@@ -48,7 +48,7 @@
 
         input[type="email"],
         input[type="password"] {
-            width: 100%;
+            width: -webkit-fill-available;
             padding: 12px 14px;
             border-radius: 12px;
             border: 1px solid rgba(148, 163, 184, 0.25);

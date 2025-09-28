@@ -95,6 +95,7 @@ class SyncMatchOversJob implements ShouldQueue
 
         $synced   = 0;
         $failures = [];
+        $api_failures = [];
 
         foreach (array_chunk($this->targetMatchIds, 5) as $chunk) {
             try {
@@ -140,10 +141,11 @@ class SyncMatchOversJob implements ShouldQueue
 
                 $oversData = $response->json();
                 if (!is_array($oversData)) {
-                    $failures[] = $matchId;
-                    $this->log('overs_fetch_invalid', 'error', 'Match overs API returned invalid payload', $this->responseContext($response, [
+                    $api_failures[] = $matchId;
+                    $this->log('overs_fetch_invalid', 'info', 'Match overs API returned null payload', $this->responseContext($response, [
                         'match_id' => $matchId,
                         'url'      => $this->baseUrl . $matchId . '/overs',
+                        'payload'   => $response->body(),
                     ]));
                     continue;
                 }
@@ -198,6 +200,7 @@ class SyncMatchOversJob implements ShouldQueue
             'matches_considered' => count($this->targetMatchIds),
             'synced'             => $synced,
             'failures'           => array_values(array_unique($failures)),
+            'api_failures'           => array_values(array_unique($api_failures)),
             'requested_ids'      => $this->matchIds,
         ]);
     }

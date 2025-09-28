@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -405,10 +406,21 @@
             height: 100%;
         }
 
-        .status-segment.success { background: rgba(34, 197, 94, 0.5); }
-        .status-segment.warning { background: rgba(234, 179, 8, 0.5); }
-        .status-segment.error { background: rgba(248, 113, 113, 0.6); }
-        .status-segment.info { background: rgba(96, 165, 250, 0.5); }
+        .status-segment.success {
+            background: rgba(34, 197, 94, 0.5);
+        }
+
+        .status-segment.warning {
+            background: rgba(234, 179, 8, 0.5);
+        }
+
+        .status-segment.error {
+            background: rgba(248, 113, 113, 0.6);
+        }
+
+        .status-segment.info {
+            background: rgba(96, 165, 250, 0.5);
+        }
 
         .pill {
             padding: 6px 12px;
@@ -511,11 +523,25 @@
             border: 2px solid rgba(15, 23, 42, 0.9);
         }
 
-        .timeline-dot.success { background: var(--success); }
-        .timeline-dot.warning { background: var(--warning); }
-        .timeline-dot.error { background: var(--error); }
-        .timeline-dot.info { background: var(--info); }
-        .timeline-dot.muted { background: rgba(148, 163, 184, 0.6); }
+        .timeline-dot.success {
+            background: var(--success);
+        }
+
+        .timeline-dot.warning {
+            background: var(--warning);
+        }
+
+        .timeline-dot.error {
+            background: var(--error);
+        }
+
+        .timeline-dot.info {
+            background: var(--info);
+        }
+
+        .timeline-dot.muted {
+            background: rgba(148, 163, 184, 0.6);
+        }
 
         .timeline-header {
             display: flex;
@@ -533,6 +559,47 @@
         .message {
             margin: 0;
             font-size: 0.9rem;
+        }
+
+        .toast-notice {
+            position: fixed;
+            top: 28px;
+            right: 28px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 14px 18px;
+            border-radius: 14px;
+            border: 1px solid rgba(148, 163, 184, 0.25);
+            background: rgba(15, 23, 42, 0.92);
+            color: var(--text-primary);
+            box-shadow: 0 24px 52px rgba(15, 23, 42, 0.45);
+            opacity: 0;
+            transform: translateY(-20px);
+            transition: opacity 0.25s ease, transform 0.25s ease;
+            z-index: 2000;
+        }
+
+        .toast-notice.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .toast-notice.warning {
+            border-color: rgba(251, 191, 36, 0.35);
+        }
+
+        .toast-notice.success {
+            border-color: rgba(52, 211, 153, 0.35);
+        }
+
+        .toast-notice.error {
+            border-color: rgba(248, 113, 113, 0.35);
+        }
+
+        .toast-notice .emoji {
+            font-size: 1.2rem;
+            line-height: 1;
         }
 
         @media (max-width: 1080px) {
@@ -553,51 +620,85 @@
     </style>
     @stack('head')
 </head>
+
 <body>
-<div class="admin-shell">
-    <aside class="sidebar">
-        <div class="brand">
-            <div class="brand-mark">PB</div>
-            <div class="brand-text">
-                <span class="title">Predictor Ops</span>
-                <span class="subtitle">Cron analytics</span>
+    <div class="admin-shell">
+        <aside class="sidebar">
+            <div class="brand">
+                <div class="brand-mark">PB</div>
+                <div class="brand-text">
+                    <span class="title">Predictor Ops</span>
+                    <span class="subtitle">Cron analytics</span>
+                </div>
             </div>
-        </div>
-        <nav class="nav">
-            @php($navItems = $adminNav ?? [])
-            @foreach($navItems as $item)
-                @php(
-                    $active = collect($item['pattern'] ?? [])->contains(function ($pattern) {
-                        return request()->is($pattern);
-                    })
-                )
-                <a class="nav-link {{ $active ? 'active' : '' }}" href="{{ $item['href'] }}">
-                    <span class="nav-dot"></span>
-                    <span>{{ $item['label'] }}</span>
-                </a>
-            @endforeach
-        </nav>
-    </aside>
-    <main class="main">
-        <header class="main-header">
-            <div>
-                <h1>{{ $pageTitle ?? 'Cron Analytics' }}</h1>
-                @isset($pageIntro)
-                    <p>{{ $pageIntro }}</p>
-                @endisset
-            </div>
-            @auth
-                <form method="POST" action="{{ route('admin.logout') }}" class="logout-form">
-                    @csrf
-                    <button type="submit" class="logout-button">Log out</button>
-                </form>
-            @endauth
-        </header>
-        <section class="content">
-            @yield('content')
-        </section>
-    </main>
-</div>
-@stack('scripts')
+            <nav class="nav">
+                @php
+                    $navItems = $adminNav ?? [];
+                @endphp
+                @foreach ($navItems as $item)
+                    @php
+                        $active = collect($item['pattern'] ?? [])->contains(function ($pattern) {
+                            return request()->is($pattern);
+                        });
+                    @endphp
+                    <a class="nav-link {{ $active ? 'active' : '' }}" href="{{ $item['href'] }}">
+                        <span class="nav-dot"></span>
+                        <span>{{ $item['label'] }}</span>
+                    </a>
+                @endforeach
+            </nav>
+        </aside>
+        <main class="main">
+            <header class="main-header">
+                <div>
+                    <h1>{{ $pageTitle ?? 'Cron Analytics' }}</h1>
+                    @isset($pageIntro)
+                        <p>{{ $pageIntro }}</p>
+                    @endisset
+                </div>
+                @auth
+                    <form method="POST" action="{{ route('admin.logout') }}" class="logout-form">
+                        @csrf
+                        <button type="submit" class="logout-button">Log out</button>
+                    </form>
+                @endauth
+            </header>
+            <section class="content">
+                @yield('content')
+            </section>
+        </main>
+    </div>
+    @if (session('toast'))
+        <script>
+            window.__adminToast = @json(session('toast'));
+        </script>
+    @endif
+    @stack('scripts')
+    <script>
+        (function() {
+            const toast = typeof window !== 'undefined' ? window.__adminToast : null;
+            if (!toast) {
+                return;
+            }
+
+            const el = document.createElement('div');
+            el.className = 'toast-notice ' + (toast.type || 'info');
+            el.innerHTML = `<span class="emoji">${toast.emoji || 'ℹ️'}</span><span>${toast.message || ''}</span>`;
+            document.body.appendChild(el);
+
+            requestAnimationFrame(() => {
+                el.classList.add('visible');
+            });
+
+            const remove = () => {
+                el.classList.remove('visible');
+                setTimeout(() => el.remove(), 500);
+            };
+
+            setTimeout(remove, 3600);
+            el.addEventListener('click', remove);
+        })();
+    </script>
 </body>
+
 </html>

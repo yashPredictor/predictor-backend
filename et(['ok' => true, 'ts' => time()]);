@@ -1,0 +1,15 @@
+[90m= [39m[34;4mGoogle\Cloud\Firestore\DocumentReference[39;24m {#6287
+    [34mconnection[39m: "[32mGoogle\Cloud\Firestore\Connection\Grpc[39m",
+    [34mvalueMapper[39m: [34;4mGoogle\Cloud\Firestore\ValueMapper[39;24m {#6343
+      [34mconnection[39m: "[32mGoogle\Cloud\Firestore\Connection\Grpc[39m",
+      [34mreturnInt64AsObject[39m: [36mfalse[39m,
+    },
+    [34mparent[39m: [34;4mGoogle\Cloud\Firestore\CollectionReference[39;24m {#6288
+      [34mconnection[39m: "[32mGoogle\Cloud\Firestore\Connection\Grpc[39m",
+      [34mvalueMapper[39m: [34;4mGoogle\Cloud\Firestore\ValueMapper[39;24m {#6343},
+      [34mname[39m: "[32mprojects/cricmultiview/databases/(default)/documents/health[39m",
+      [34mparent[39m: [36mnull[39m,
+    },
+    [34mname[39m: "[32mprojects/cricmultiview/databases/(default)/documents/health/ping[39m",
+  }
+

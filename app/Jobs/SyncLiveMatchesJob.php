@@ -120,8 +120,8 @@ class SyncLiveMatchesJob implements ShouldQueue
                 $matchRef = $this->firestore->collection('matches')->document($matchId);
                 $bulk->set($matchRef, $matchDocData, ['merge' => true]);
 
-                $infoRef = $this->firestore->collection('matchInfo')->document($matchId);
-                $bulk->set($infoRef, $preparedMatchInfo, ['merge' => true]);
+                // $infoRef = $this->firestore->collection('matchInfo')->document($matchId);
+                // $bulk->set($infoRef, $preparedMatchInfo, ['merge' => true]);
 
                 $synced++;
                 $this->log('match_synced', 'success', 'Synced live match', [
@@ -311,7 +311,7 @@ class SyncLiveMatchesJob implements ShouldQueue
     {
         $prepared = $matchInfo;
 
-        $prepared['matchId'] = (string) ($matchInfo['matchId'] ?? '');
+        $prepared['matchId'] = (int) ($matchInfo['matchId'] ?? 0);
         if ($prepared['matchId'] === '') {
             unset($prepared['matchId']);
         }
@@ -320,9 +320,15 @@ class SyncLiveMatchesJob implements ShouldQueue
             $prepared['state_lowercase'] = strtolower($matchInfo['state']);
         }
 
-        foreach (['startDate', 'endDate', 'seriesStartDt', 'seriesEndDt'] as $timestampKey) {
+        foreach (['startDate', 'endDate'] as $timestampKey) {
             if (isset($matchInfo[$timestampKey])) {
                 $prepared[$timestampKey] = (int) $matchInfo[$timestampKey];
+            }
+        }
+
+          foreach (['seriesStartDt', 'seriesEndDt'] as $timestampKey) {
+            if (isset($matchInfo[$timestampKey])) {
+                $prepared[$timestampKey] = (string) $matchInfo[$timestampKey];
             }
         }
 

@@ -16,8 +16,8 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withSchedule(function (Schedule $schedule): void {
         $schedule->job(new SyncSeriesDataJob())->daily()->withoutOverlapping();
-        $schedule->job(new SyncLiveMatchesJob())->everyThirtySeconds()->withoutOverlapping();
-        $schedule->job(new SyncMatchOversJob())->everyThirtySeconds()->withoutOverlapping();
+        $schedule->job(new SyncLiveMatchesJob())->everyMinute()->withoutOverlapping();
+        $schedule->job(new SyncMatchOversJob())->everyMinute()->withoutOverlapping();
     })
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->alias([

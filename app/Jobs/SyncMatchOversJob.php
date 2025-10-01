@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Services\MatchOversSyncLogger;
 use App\Support\Logging\ApiLogging;
+use App\Support\Queue\Middleware\RespectPauseWindow;
 use Google\Cloud\Firestore\FirestoreClient;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -49,6 +50,14 @@ class SyncMatchOversJob implements ShouldQueue
         private readonly array $matchIds = [],
         private ?string $runId = null,
     ) {}
+
+    /**
+     * @return string[]
+     */
+    public function middleware(): array
+    {
+        return [RespectPauseWindow::class];
+    }
 
     public function handle(): void
     {

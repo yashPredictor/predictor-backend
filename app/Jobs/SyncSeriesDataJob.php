@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Services\SeriesSyncLogger;
 use App\Support\Logging\ApiLogging;
+use App\Support\Queue\Middleware\RespectPauseWindow;
 use Google\Cloud\Firestore\FirestoreClient;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -43,6 +44,14 @@ class SyncSeriesDataJob implements ShouldQueue
         private readonly array $matchIds = [],
         private ?string $runId = null,
     ) {}
+
+    /**
+     * @return string[]
+     */
+    public function middleware(): array
+    {
+        return [RespectPauseWindow::class];
+    }
 
     public function handle(): void
     {
@@ -198,7 +207,7 @@ class SyncSeriesDataJob implements ShouldQueue
                 $this->recordFailure('series_fetch', "Invalid response for series type {$type}", $this->responseContext($response, [
                     'series_type' => $type,
                     'url'         => self::API_BASE_URL_SERIES . $type,
-                ]));
+                ]), null, 'warning');
                 continue;
             }
 
@@ -336,7 +345,7 @@ class SyncSeriesDataJob implements ShouldQueue
                 $this->recordFailure('match_fetch', "Invalid response for series {$seriesId}", $this->responseContext($response, [
                     'series_id' => $seriesId,
                     'category'  => $category,
-                ]));
+                ]), null, 'warning');
                 continue;
             }
 
@@ -473,7 +482,7 @@ class SyncSeriesDataJob implements ShouldQueue
         }
     }
 
-    private function recordFailure(string $action, string $message, array $context = [], ?Throwable $exception = null): void
+    private function recordFailure(string $action, string $message, array $context = [], ?Throwable $exception = null, $status = 'error'): void
     {
         if ($exception !== null) {
             $context = $this->exceptionContext($exception, $context);
@@ -487,7 +496,7 @@ class SyncSeriesDataJob implements ShouldQueue
             'context' => $context,
         ];
 
-        $this->logger->log($action, 'error', $message, $context);
+        $this->logger->log($action, $status, $message, $context);
     }
 
     private function finalize(string $status): void

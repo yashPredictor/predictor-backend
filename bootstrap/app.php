@@ -3,6 +3,7 @@
 use App\Jobs\SyncLiveMatchesJob;
 use App\Jobs\SyncMatchOversJob;
 use App\Jobs\SyncSeriesDataJob;
+use App\Services\PauseWindowService;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -15,9 +16,22 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withSchedule(function (Schedule $schedule): void {
-        $schedule->job(new SyncSeriesDataJob())->daily()->withoutOverlapping();
-        $schedule->job(new SyncLiveMatchesJob())->everyMinute()->withoutOverlapping();
-        $schedule->job(new SyncMatchOversJob())->everyMinute()->withoutOverlapping();
+        $shouldRun = static fn (): bool => !app(PauseWindowService::class)->isPaused();
+
+        $schedule->job(new SyncSeriesDataJob())
+            ->daily()
+            ->withoutOverlapping()
+            ->when($shouldRun);
+
+        $schedule->job(new SyncLiveMatchesJob())
+            ->everyThirtySeconds()
+            ->withoutOverlapping()
+            ->when($shouldRun);
+
+        $schedule->job(new SyncMatchOversJob())
+            ->everyThirtySeconds()
+            ->withoutOverlapping()
+            ->when($shouldRun);
     })
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->alias([

@@ -2,6 +2,7 @@
 
 @section('content')
 @php
+    $appNow = now(config('app.timezone', 'UTC'));
     $statusClassMap = [
         'success' => 'status-pill success',
         'warning' => 'status-pill warning',
@@ -73,7 +74,7 @@
                     </div>
                     <div class="metric">
                         <span class="stat-value" style="font-size: 1.4rem;">
-                            {{ $summary['last_run_at'] ? $summary['last_run_at']->diffForHumans() : 'Never' }}
+                            {{ $summary['last_run_at'] ? $summary['last_run_at']->diffForHumans($appNow) : 'Never' }}
                         </span>
                         <span class="stat-label">Last activity</span>
                     </div>
@@ -100,7 +101,7 @@
                 </div>
 
                 @if($latestRun)
-                    <div class="card-subtitle" style="margin-top: auto;">Latest run · {{ $latestRun['run_id'] }} · {{ $latestRun['finished_at']?->diffForHumans() }}</div>
+                    <div class="card-subtitle" style="margin-top: auto;">Latest run · {{ $latestRun['run_id'] }} · {{ $latestRun['finished_at']?->diffForHumans($appNow) }}</div>
                 @endif
             </a>
         @endforeach
@@ -128,8 +129,11 @@
                         </div>
                         <p class="card-subtitle" style="margin: 0 0 8px;">{{ $log->message }}</p>
                         <div class="issue-meta">
-                            <span>Run {{ $log->run_id }}</span>
-                            <span>{{ optional($log->created_at)->diffForHumans() }}</span>
+                            <span class="run-id-cell">
+                                <span>Run {{ $log->run_id }}</span>
+                                <button type="button" class="copy-button" data-copy-text="{{ $log->run_id }}" aria-label="Copy run id {{ $log->run_id }}">Copy</button>
+                            </span>
+                            <span>{{ optional($log->created_at)?->diffForHumans($appNow) }}</span>
                             <a class="table-link" href="{{ route('admin.jobs.runs.show', [$item['job_key'], $log->run_id]) }}">View run</a>
                         </div>
                     </article>
@@ -168,11 +172,14 @@
                             @endphp
                             <tr>
                                 <td>
-                                    <a class="table-link" href="{{ route('admin.jobs.runs.show', [$summary['key'], $run['run_id']]) }}">{{ $run['run_id'] }}</a>
+                                    <span class="run-id-cell">
+                                        <a class="table-link" href="{{ route('admin.jobs.runs.show', [$summary['key'], $run['run_id']]) }}">{{ $run['run_id'] }}</a>
+                                        <button type="button" class="copy-button" data-copy-text="{{ $run['run_id'] }}" aria-label="Copy run id {{ $run['run_id'] }}">Copy</button>
+                                    </span>
                                 </td>
                                 <td><span class="{{ $statusPill }}">{{ strtoupper($status) }}</span></td>
                                 <td>{{ $run['started_at']?->format('M j · H:i:s') ?? '—' }}</td>
-                                <td>{{ $run['finished_at']?->diffForHumans() ?? '—' }}</td>
+                                <td>{{ $run['finished_at']?->diffForHumans($appNow) ?? '—' }}</td>
                                 <td>{{ $run['duration_human'] ?? '—' }}</td>
                                 <td>{{ $run['total_events'] }}</td>
                             </tr>

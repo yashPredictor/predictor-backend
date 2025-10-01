@@ -2,6 +2,7 @@
 
 @section('content')
 @php
+    $appNow = now(config('app.timezone', 'UTC'));
     $statusClassMap = [
         'success' => 'status-pill success',
         'warning' => 'status-pill warning',
@@ -34,7 +35,7 @@
         <div class="card" style="border-top: 3px solid {{ $accentPalette[$job['accent']] ?? 'rgba(148,163,184,0.35)' }};">
             <div class="card-title">Last run completed</div>
             <div class="stat-value" style="font-size: 1.4rem;">
-                {{ $summary['last_run_at'] ? $summary['last_run_at']->diffForHumans() : 'Never' }}
+                {{ $summary['last_run_at'] ? $summary['last_run_at']->diffForHumans($appNow) : 'Never' }}
             </div>
             @if($latestRun)
                 <div class="card-subtitle">Final status · <span class="{{ $statusClassMap[$latestRun['final_status']] ?? 'status-pill muted' }}">{{ strtoupper($latestRun['final_status']) }}</span></div>
@@ -119,7 +120,12 @@
                         $statusPill = $statusClassMap[$status] ?? 'status-pill muted';
                     @endphp
                     <tr>
-                        <td><a class="table-link" href="{{ route('admin.jobs.runs.show', [$job['key'], $run->run_id]) }}">{{ $run->run_id }}</a></td>
+                        <td>
+                            <span class="run-id-cell">
+                                <a class="table-link" href="{{ route('admin.jobs.runs.show', [$job['key'], $run->run_id]) }}">{{ $run->run_id }}</a>
+                                <button type="button" class="copy-button" data-copy-text="{{ $run->run_id }}" aria-label="Copy run id {{ $run->run_id }}">Copy</button>
+                            </span>
+                        </td>
                         <td><span class="{{ $statusPill }}">{{ strtoupper($status) }}</span></td>
                         <td>{{ $run->started_at?->format('M j · H:i:s') ?? '—' }}</td>
                         <td>{{ $run->finished_at?->format('M j · H:i:s') ?? '—' }}</td>
@@ -186,8 +192,11 @@
                         </div>
                         <p class="card-subtitle" style="margin: 0 0 8px;">{{ $log->message }}</p>
                         <div class="issue-meta">
-                            <span>Run {{ $log->run_id }}</span>
-                            <span>{{ optional($log->created_at)->diffForHumans() }}</span>
+                            <span class="run-id-cell">
+                                <span>Run {{ $log->run_id }}</span>
+                                <button type="button" class="copy-button" data-copy-text="{{ $log->run_id }}" aria-label="Copy run id {{ $log->run_id }}">Copy</button>
+                            </span>
+                            <span>{{ optional($log->created_at)?->diffForHumans($appNow) }}</span>
                             <a class="table-link" href="{{ route('admin.jobs.runs.show', [$job['key'], $log->run_id]) }}">View run</a>
                         </div>
                     </article>

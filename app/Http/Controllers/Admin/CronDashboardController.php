@@ -39,7 +39,7 @@ class CronDashboardController extends Controller
 
     public function __construct()
     {
-        view()->share('adminNav', $this->navItems());
+        view()->share('adminNav', self::navItems());
     }
 
     public function index(Request $request)
@@ -140,7 +140,7 @@ class CronDashboardController extends Controller
     /**
      * Build the navigation structure shared across admin pages.
      */
-    protected function navItems(): array
+    public static function navItems(): array
     {
         $items = [
             [
@@ -159,6 +159,13 @@ class CronDashboardController extends Controller
                 'pattern' => ['admin-yash/jobs/' . $key . '*'],
             ];
         }
+
+        $items[] = [
+            'key'     => 'pause-window',
+            'label'   => 'Pause Window',
+            'href'    => route('admin.pause-window.edit'),
+            'pattern' => ['admin-yash/pause-window*'],
+        ];
 
         return $items;
     }

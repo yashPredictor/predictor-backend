@@ -300,6 +300,41 @@
             background: rgba(30, 41, 59, 0.55);
         }
 
+        .table .run-id-cell,
+        .run-id-cell {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .copy-button {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 10px;
+            border-radius: 10px;
+            border: 1px solid var(--panel-border);
+            background: rgba(15, 23, 42, 0.9);
+            color: var(--text-muted);
+            font-size: 0.75rem;
+            cursor: pointer;
+            transition: background 0.2s ease, color 0.2s ease, border 0.2s ease, transform 0.2s ease;
+        }
+
+        .copy-button:hover,
+        .copy-button:focus-visible {
+            color: var(--text-primary);
+            border-color: rgba(129, 140, 248, 0.4);
+            transform: translateY(-1px);
+        }
+
+        .copy-button.copied {
+            background: rgba(34, 197, 94, 0.18);
+            border-color: rgba(34, 197, 94, 0.45);
+            color: var(--success);
+        }
+
         .empty-state {
             padding: 32px;
             text-align: center;
@@ -697,6 +732,58 @@
 
             setTimeout(remove, 3600);
             el.addEventListener('click', remove);
+        })();
+    </script>
+    <script>
+        (function() {
+            const buttons = document.querySelectorAll('.copy-button[data-copy-text]');
+            if (!buttons.length) {
+                return;
+            }
+
+            const writeClipboard = async (text) => {
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    return navigator.clipboard.writeText(text);
+                }
+
+                const area = document.createElement('textarea');
+                area.value = text;
+                area.setAttribute('readonly', '');
+                area.style.position = 'absolute';
+                area.style.left = '-9999px';
+                document.body.appendChild(area);
+                area.select();
+                try {
+                    document.execCommand('copy');
+                } finally {
+                    document.body.removeChild(area);
+                }
+            };
+
+            buttons.forEach((button) => {
+                const defaultLabel = (button.textContent || 'Copy').trim();
+                button.dataset.copyDefault = defaultLabel;
+                button.addEventListener('click', async () => {
+                    const text = button.getAttribute('data-copy-text');
+                    if (!text) {
+                        return;
+                    }
+
+                    try {
+                        await writeClipboard(text);
+                        button.classList.add('copied');
+                        button.textContent = button.dataset.copiedLabel || 'Copied!';
+                    } catch (error) {
+                        button.classList.remove('copied');
+                        button.textContent = button.dataset.copyErrorLabel || 'Copy failed';
+                    }
+
+                    window.setTimeout(() => {
+                        button.classList.remove('copied');
+                        button.textContent = button.dataset.copyDefault || defaultLabel;
+                    }, 1800);
+                });
+            });
         })();
     </script>
 </body>

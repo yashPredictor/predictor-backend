@@ -2,6 +2,7 @@
 
 @section('content')
 @php
+    $appNow = now(config('app.timezone', 'UTC'));
     $statusClassMap = [
         'success' => 'status-pill success',
         'warning' => 'status-pill warning',
@@ -25,7 +26,10 @@
 <div class="stacked-section" style="gap: 28px;">
     <section class="card" style="border-top: 3px solid {{ $accentPalette[$job['accent']] ?? 'rgba(148,163,184,0.35)' }};">
         <div class="section-title">
-            <span>{{ $job['label'] }} · Run {{ $run['run_id'] }}</span>
+            <div class="run-id-cell">
+                <span>{{ $job['label'] }} · Run {{ $run['run_id'] }}</span>
+                <button type="button" class="copy-button" data-copy-text="{{ $run['run_id'] }}" aria-label="Copy run id {{ $run['run_id'] }}">Copy</button>
+            </div>
             <div class="toolbar" style="gap: 12px;">
                 <a class="pill" href="{{ route('admin.jobs.show', [$job['key']]) }}">Back to job runs</a>
                 <span class="{{ $statusClassMap[$run['final_status']] ?? 'status-pill muted' }}">{{ strtoupper($run['final_status']) }}</span>
@@ -36,12 +40,12 @@
             <div class="metric">
                 <span class="stat-label">Started</span>
                 <span class="stat-value" style="font-size: 1.3rem;">{{ $run['started_at']?->format('M j · H:i:s') ?? '—' }}</span>
-                <span class="card-subtitle">{{ $run['started_at']?->diffForHumans() }}</span>
+                <span class="card-subtitle">{{ $run['started_at']?->diffForHumans($appNow) }}</span>
             </div>
             <div class="metric">
                 <span class="stat-label">Finished</span>
                 <span class="stat-value" style="font-size: 1.3rem;">{{ $run['finished_at']?->format('M j · H:i:s') ?? '—' }}</span>
-                <span class="card-subtitle">{{ $run['finished_at']?->diffForHumans() }}</span>
+                <span class="card-subtitle">{{ $run['finished_at']?->diffForHumans($appNow) }}</span>
             </div>
             <div class="metric">
                 <span class="stat-label">Duration</span>
@@ -87,8 +91,11 @@
                     <p class="message">{{ $log->message }}</p>
                     <div class="issue-meta" style="margin-top: 6px;">
                         <span>Action: {{ $log->action }}</span>
-                        <span>Run: {{ $log->run_id }}</span>
-                        <span>{{ optional($log->created_at)->diffForHumans() }}</span>
+                        <span class="run-id-cell">
+                            <span>Run: {{ $log->run_id }}</span>
+                            <button type="button" class="copy-button" data-copy-text="{{ $log->run_id }}" aria-label="Copy run id {{ $log->run_id }}">Copy</button>
+                        </span>
+                        <span>{{ optional($log->created_at)?->diffForHumans($appNow) }}</span>
                     </div>
                     @if($context)
                         <details style="margin-top: 10px;">

@@ -19,7 +19,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $shouldRun = static fn (): bool => !app(PauseWindowService::class)->isPaused();
 
         $schedule->job(new SyncSeriesDataJob())
-            ->daily()
+            ->cron('0 0 */3 * *')
             ->withoutOverlapping()
             ->when($shouldRun);
 

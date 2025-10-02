@@ -126,7 +126,21 @@ class SyncLiveMatchesJob implements ShouldQueue
                 $preparedMatchInfo = $this->prepareMatchInfo($matchInfo);
                 $matchDocData      = $this->prepareMatchDocument($match, $preparedMatchInfo);
 
-                $matchRef = $this->firestore->collection('matches')->document($matchId);
+                $matchRef          = $this->firestore->collection('matches')->document($matchId);
+                $existingSnapshot  = $matchRef->snapshot();
+
+                if ($existingSnapshot->exists()) {
+                    $existingData = $existingSnapshot->data();
+                    $adjustedData = $this->preserveRunProgress($matchDocData, $existingData ?? []);
+
+                    if ($adjustedData !== $matchDocData) {
+                        $this->log('match_runs_preserved', 'info', 'Retained higher run totals from existing snapshot', [
+                            'match_id' => $matchId,
+                        ]);
+                        $matchDocData = $adjustedData;
+                    }
+                }
+
                 $bulk->set($matchRef, $matchDocData, ['merge' => true]);
 
                 // $infoRef = $this->firestore->collection('matchInfo')->document($matchId);
@@ -377,5 +391,27 @@ class SyncLiveMatchesJob implements ShouldQueue
         }
 
         $this->logger->log($action, $status, $message, $context);
+    }
+
+    /**
+     * @param array<string, mixed> $latest
+     * @param array<string, mixed> $existing
+     */
+    private function preserveRunProgress(array $latest, array $existing): array
+    {
+        foreach ($latest as $key => $value) {
+            if ($key === 'runs' && isset($existing[$key]) && is_numeric($existing[$key]) && is_numeric($value)) {
+                if ((float) $value < (float) $existing[$key]) {
+                    $latest[$key] = $existing[$key];
+                }
+                continue;
+            }
+
+            if (is_array($value) && isset($existing[$key]) && is_array($existing[$key])) {
+                $latest[$key] = $this->preserveRunProgress($value, $existing[$key]);
+            }
+        }
+
+        return $latest;
     }
 }

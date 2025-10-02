@@ -173,12 +173,41 @@ class SyncMatchOversJob implements ShouldQueue
                     $docRef       = $this->firestore->collection('matchOvers')->document($matchId);
                     $apiUpdatedAt = (int) ($oversData['responselastupdated']
                         ?? ($oversData['miniscore']['responselastupdated'] ?? 0));
-                    $bulk->set($docRef, [
-                        'oversData'      => $oversData,
-                        'apiUpdatedAt'   => $apiUpdatedAt,
-                        'serverTime'     => now()->toIso8601String(),
-                        'lastFetched'    => now()->valueOf(),
-                    ], ['merge' => true]);
+
+                    $existingSnapshot = null;
+                    $existingData     = null;
+
+                    try {
+                        $existingSnapshot = $docRef->snapshot();
+                    } catch (Throwable $snapshotError) {
+                        $this->log('overs_snapshot_failed', 'warning', 'Failed to read existing match overs snapshot', $this->exceptionContext($snapshotError, [
+                            'match_id' => $matchId,
+                        ]));
+                    }
+
+                    if ($existingSnapshot?->exists()) {
+                        $existingData = $existingSnapshot->data();
+                    }
+
+                    if (is_array($existingData) && isset($existingData['oversData']) && is_array($existingData['oversData'])) {
+                        $preserved = $this->preserveRunProgress($oversData, $existingData['oversData']);
+
+                        if ($preserved !== $oversData) {
+                            $this->log('overs_runs_preserved', 'info', 'Retained higher run totals from existing overs snapshot', [
+                                'match_id' => $matchId,
+                            ]);
+                            $oversData = $preserved;
+                        }
+                    }
+
+                    $payload = [
+                        'oversData'    => $oversData,
+                        'apiUpdatedAt' => $apiUpdatedAt,
+                        'serverTime'   => now()->toIso8601String(),
+                        'lastFetched'  => now()->valueOf(),
+                    ];
+
+                    $bulk->set($docRef, $payload, ['merge' => true]);
 
                     $synced++;
                     $this->log('overs_synced', 'success', 'Stored overs in Firestore', [
@@ -327,5 +356,28 @@ class SyncMatchOversJob implements ShouldQueue
         }
 
         $this->logger->log($action, $status, $message, $context);
+    }
+
+    /**
+     * @param array<mixed> $latest
+     * @param array<mixed> $existing
+     * @return array<mixed>
+     */
+    private function preserveRunProgress(array $latest, array $existing): array
+    {
+        foreach ($latest as $key => $value) {
+            if ($key === 'runs' && isset($existing[$key]) && is_numeric($existing[$key]) && is_numeric($value)) {
+                if ((float) $value < (float) $existing[$key]) {
+                    $latest[$key] = $existing[$key];
+                }
+                continue;
+            }
+
+            if (is_array($value) && isset($existing[$key]) && is_array($existing[$key])) {
+                $latest[$key] = $this->preserveRunProgress($value, $existing[$key]);
+            }
+        }
+
+        return $latest;
     }
 }

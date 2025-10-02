@@ -5,11 +5,7 @@ use App\Http\Controllers\Admin\CronDashboardController;
 use App\Http\Controllers\Admin\PauseWindowController;
 use Illuminate\Support\Facades\Route;
 
-Route::get('/', function () {
-    return view('welcome');
-});
-
-Route::prefix('admin-yash')->name('admin.')->group(function () {
+Route::prefix('/')->name('admin.')->group(function () {
     Route::middleware('guest')->group(function () {
         Route::get('/login', [AuthController::class, 'showLoginForm'])->name('login');
         Route::post('/login', [AuthController::class, 'login'])->name('login.submit');

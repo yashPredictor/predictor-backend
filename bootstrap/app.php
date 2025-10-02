@@ -24,7 +24,7 @@ return Application::configure(basePath: dirname(__DIR__))
             ->when($shouldRun);
 
         $schedule->job(new SyncLiveMatchesJob())
-            ->everyThirtySeconds()
+            ->everyMinute()
             ->withoutOverlapping()
             ->when($shouldRun);
 

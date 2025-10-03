@@ -84,8 +84,18 @@ class SyncMatchOversJob implements ShouldQueue
         $this->targetMatchIds = $this->resolveMatchIds();
 
         if (empty($this->targetMatchIds)) {
+            $apiSummary = $this->getApiCallBreakdown();
             $this->log('no_matches', 'warning', 'No live matches found for overs sync', [
                 'requested_ids' => $this->matchIds,
+                'api_calls'     => $apiSummary,
+            ]);
+            $this->log('job_completed', 'warning', 'SyncMatchOvers job finished', [
+                'matches_considered' => 0,
+                'synced'             => 0,
+                'failures'           => [],
+                'api_failures'       => [],
+                'requested_ids'      => $this->matchIds,
+                'api_calls'          => $apiSummary,
             ]);
             return;
         }
@@ -112,6 +122,7 @@ class SyncMatchOversJob implements ShouldQueue
                     $requests = [];
                     foreach ($chunk as $matchId) {
                         $url          = $this->baseUrl . $matchId . '/overs';
+                        $this->recordApiCall($url, 'GET', 'match_overs');
                         $requests[]   = $pool->withHeaders($headers)->get($url);
                     }
 
@@ -234,12 +245,15 @@ class SyncMatchOversJob implements ShouldQueue
             ]);
         }
 
+        $apiSummary = $this->getApiCallBreakdown();
+
         $this->log('job_completed', empty($failures) ? 'success' : 'warning', 'SyncMatchOvers job finished', [
             'matches_considered' => count($this->targetMatchIds),
             'synced'             => $synced,
             'failures'           => array_values(array_unique($failures)),
-            'api_failures'           => array_values(array_unique($api_failures)),
+            'api_failures'       => array_values(array_unique($api_failures)),
             'requested_ids'      => $this->matchIds,
+            'api_calls'          => $apiSummary,
         ]);
     }
 

@@ -20,6 +20,7 @@
         'emerald' => 'rgba(16, 185, 129, 0.6)',
         'amber' => 'rgba(245, 158, 11, 0.6)',
         'rose' => 'rgba(244, 114, 182, 0.6)',
+        'cyan' => 'rgba(6, 182, 212, 0.6)',
     ];
 @endphp
 
@@ -53,6 +54,11 @@
                 <span class="card-subtitle">{{ $run['total_events'] }} logged events</span>
             </div>
             <div class="metric">
+                <span class="stat-label">API calls</span>
+                <span class="stat-value">{{ isset($run['api_calls']['total']) && !is_null($run['api_calls']['total']) ? number_format($run['api_calls']['total']) : '—' }}</span>
+                <span class="card-subtitle">Captured from job telemetry</span>
+            </div>
+            <div class="metric">
                 <span class="stat-label">Errors</span>
                 <span class="stat-value" style="color: var(--error);">{{ $run['error_count'] }}</span>
             </div>
@@ -67,6 +73,26 @@
         </div>
         @if($run['summary_message'])
             <div class="card-subtitle" style="margin-top: 18px;">Summary: {{ $run['summary_message'] }}</div>
+        @endif
+        @if(!empty($run['api_calls']['breakdown']))
+            <div class="section-subtitle" style="margin-top: 18px;">API breakdown</div>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                @php
+                    $apiTotal = $run['api_calls']['total'] ?? null;
+                @endphp
+                <span class="badge" style="background: rgba(129, 140, 248, 0.15);">Total {{ !is_null($apiTotal) ? number_format($apiTotal) : '—' }}</span>
+                @foreach($run['api_calls']['breakdown'] as $entry)
+                    @php
+                        $endpointLabel = $entry['label'];
+                        if (!empty($entry['method']) && !empty($entry['path'])) {
+                            $endpointLabel = $entry['method'] . ' ' . $entry['path'];
+                        } elseif (!empty($entry['method']) && !empty($entry['host'])) {
+                            $endpointLabel = $entry['method'] . ' ' . $entry['host'];
+                        }
+                    @endphp
+                    <span class="badge">{{ $endpointLabel }} · {{ number_format($entry['count']) }}</span>
+                @endforeach
+            </div>
         @endif
     </section>
 

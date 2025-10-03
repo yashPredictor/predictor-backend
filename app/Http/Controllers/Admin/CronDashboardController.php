@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\LiveMatchSyncLog;
 use App\Models\MatchOversSyncLog;
 use App\Models\SeriesSyncLog;
+use App\Models\ScorecardSyncLog;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -34,6 +35,12 @@ class CronDashboardController extends Controller
             'description' => 'Captures live over-by-over miniscores for active matches.',
             'accent'      => 'rose',
             'model'       => MatchOversSyncLog::class,
+        ],
+        'scorecards' => [
+            'label'       => 'Scorecard Sync',
+            'description' => 'Refreshes detailed scorecards and squad lists for live matches.',
+            'accent'      => 'cyan',
+            'model'       => ScorecardSyncLog::class,
         ],
     ];
 
@@ -87,7 +94,25 @@ class CronDashboardController extends Controller
             ->paginate(25)
             ->withQueryString();
 
-        $runs->getCollection()->transform(function ($run) {
+        $completionLogs = collect();
+
+        if ($runs->isNotEmpty()) {
+            $runIds = $runs->getCollection()->pluck('run_id')->filter()->unique()->all();
+
+            if (!empty($runIds)) {
+                $logBuckets = $modelClass::query()
+                    ->whereIn('run_id', $runIds)
+                    ->orderBy('created_at')
+                    ->get()
+                    ->groupBy('run_id');
+
+                $completionLogs = $logBuckets->map(function (Collection $logs) use ($job) {
+                    return $this->mapRun($logs, $job);
+                });
+            }
+        }
+
+        $runs->getCollection()->transform(function ($run) use ($completionLogs) {
             $run->started_at  = $run->started_at ? Carbon::parse($run->started_at) : null;
             $run->finished_at = $run->finished_at ? Carbon::parse($run->finished_at) : null;
             $run->duration_seconds = ($run->started_at && $run->finished_at)
@@ -99,6 +124,10 @@ class CronDashboardController extends Controller
             $run->warning_count     = (int) $run->warning_count;
             $run->success_count     = (int) $run->success_count;
             $run->event_count       = (int) $run->event_count;
+
+            $summary = $completionLogs->get($run->run_id);
+            $run->api_call_total      = $summary['api_calls']['total'] ?? null;
+            $run->api_call_breakdown  = $summary['api_calls']['breakdown'] ?? [];
 
             return $run;
         });
@@ -228,6 +257,14 @@ class CronDashboardController extends Controller
             ->limit(5)
             ->get();
 
+        $windowCompletionLogs = $modelClass::query()
+            ->where('created_at', '>=', $windowFrom)
+            ->whereIn('action', ['job_completed', 'job_finished'])
+            ->orderByDesc('created_at')
+            ->get();
+
+        $apiWindowSummary = $this->aggregateApiSummary($windowCompletionLogs);
+
         return $config + [
             'key'              => $key,
             'total_runs'       => $totalRuns,
@@ -237,23 +274,29 @@ class CronDashboardController extends Controller
             'recent_runs'      => $recentRuns,
             'recent_issues'    => $recentIssues,
             'window_days'      => $days,
+            'api_window_summary' => $apiWindowSummary,
         ];
     }
 
     protected function mapRun(Collection $logs, string $jobKey): array
     {
-        $ordered      = $logs->sortBy('created_at')->values();
-        $first        = $ordered->first();
-        $last         = $ordered->last();
-        $jobCompleted = $ordered->firstWhere('action', 'job_completed');
+        $ordered = $logs->sortBy('created_at')->values();
+        $first   = $ordered->first();
+        $last    = $ordered->last();
 
-        $finishedAt = $jobCompleted?->created_at ?? $last?->created_at;
+        $completionLog = $ordered->first(function ($log) {
+            return in_array($log->action, ['job_completed', 'job_finished'], true);
+        }) ?? $last;
+
+        $finishedAt = $completionLog?->created_at;
         $duration   = ($first && $finishedAt)
             ? max(0, $first->created_at->diffInSeconds($finishedAt))
             : null;
 
-        $finalStatus = $jobCompleted?->status
+        $finalStatus = $completionLog?->status
             ?? ($last?->status ?? 'info');
+
+        $apiSummary = $this->extractApiCallSummary($completionLog?->context ?? []);
 
         return [
             'job_key'          => $jobKey,
@@ -268,7 +311,10 @@ class CronDashboardController extends Controller
             'info_count'       => $ordered->where('status', 'info')->count(),
             'total_events'     => $ordered->count(),
             'final_status'     => $finalStatus,
-            'summary_message'  => $jobCompleted?->message ?? $last?->message,
+            'summary_message'  => $completionLog?->message ?? $last?->message,
+            'api_calls'        => $apiSummary,
+            'api_call_total'   => $apiSummary['total'],
+            'api_call_breakdown' => $apiSummary['breakdown'],
         ];
     }
 
@@ -295,5 +341,184 @@ class CronDashboardController extends Controller
         $seconds = $remain % 60;
 
         return sprintf('%dh %dm %ds', $hours, $minutes, $seconds);
+    }
+
+    /**
+     * @param array<string, mixed>|null $context
+     * @return array{total: ?int, breakdown: array<int, array{label: string, count: int, method: ?string, host: ?string, path: ?string}>}
+     */
+    protected function extractApiCallSummary(?array $context): array
+    {
+        if (!is_array($context)) {
+            return [
+                'total'     => null,
+                'breakdown' => [],
+            ];
+        }
+
+        $total          = null;
+        $breakdownInput = null;
+
+        if (array_key_exists('api_calls', $context)) {
+            $payload = $context['api_calls'];
+
+            if (is_array($payload)) {
+                $total          = $payload['total'] ?? ($payload['count'] ?? null);
+                $breakdownInput = $payload['breakdown'] ?? null;
+            } elseif (is_numeric($payload)) {
+                $total = $payload;
+            }
+        }
+
+        if ($total === null && array_key_exists('apiCalls', $context) && is_numeric($context['apiCalls'])) {
+            $total = $context['apiCalls'];
+        }
+
+        if ($breakdownInput === null && array_key_exists('apiCallBreakdown', $context)) {
+            $breakdownInput = $context['apiCallBreakdown'];
+        }
+
+        $summaryTotal = $total !== null && is_numeric($total) ? (int) $total : null;
+        $breakdown    = $this->normaliseApiBreakdown($breakdownInput);
+
+        return [
+            'total'     => $summaryTotal,
+            'breakdown' => $breakdown,
+        ];
+    }
+
+    /**
+     * @param mixed $breakdown
+     * @return array<int, array{label: string, count: int, method: ?string, host: ?string, path: ?string}>
+     */
+    protected function normaliseApiBreakdown($breakdown): array
+    {
+        if (!is_array($breakdown)) {
+            return [];
+        }
+
+        $normalised = [];
+
+        foreach ($breakdown as $key => $entry) {
+            $label  = is_string($key) ? $key : null;
+            $count  = null;
+            $method = null;
+            $host   = null;
+            $path   = null;
+
+            if (is_array($entry)) {
+                $count  = $entry['count'] ?? ($entry['total'] ?? null);
+                $method = $entry['method'] ?? ($entry['http_method'] ?? null);
+                $host   = $entry['host'] ?? null;
+                $path   = $entry['path'] ?? ($entry['endpoint'] ?? null);
+                $label  = $entry['label'] ?? $label;
+            } elseif (is_numeric($entry)) {
+                $count = $entry;
+            } else {
+                continue;
+            }
+
+            $count = is_numeric($count) ? (int) $count : 0;
+
+            if ($label === null) {
+                if ($method && $path) {
+                    $label = trim($method . ' ' . $path);
+                } elseif ($method && $host) {
+                    $label = trim($method . ' ' . $host);
+                } elseif ($path) {
+                    $label = (string) $path;
+                } elseif ($host) {
+                    $label = (string) $host;
+                } else {
+                    $label = is_string($key) ? $key : 'entry_' . count($normalised);
+                }
+            }
+
+            $normalised[] = [
+                'label'  => $label,
+                'count'  => $count,
+                'method' => $method,
+                'host'   => $host,
+                'path'   => $path,
+            ];
+        }
+
+        usort($normalised, static fn ($a, $b) => $b['count'] <=> $a['count']);
+
+        return $normalised;
+    }
+
+    protected function aggregateApiSummary(Collection $completionLogs): array
+    {
+        if ($completionLogs->isEmpty()) {
+            return [
+                'total'     => null,
+                'breakdown' => [],
+                'runs'      => 0,
+            ];
+        }
+
+        $total    = 0;
+        $hasData  = false;
+        $breakdown = [];
+
+        foreach ($completionLogs as $log) {
+            $summary = $this->extractApiCallSummary($log->context ?? []);
+
+            if ($summary['total'] !== null) {
+                $total   += (int) $summary['total'];
+                $hasData = true;
+            }
+
+            foreach ($summary['breakdown'] as $entry) {
+                $label = $entry['label'] ?? null;
+                if ($label === null) {
+                    continue;
+                }
+
+                $hasData = true;
+
+                if (!isset($breakdown[$label])) {
+                    $breakdown[$label] = [
+                        'label'  => $label,
+                        'count'  => 0,
+                        'method' => $entry['method'] ?? null,
+                        'host'   => $entry['host'] ?? null,
+                        'path'   => $entry['path'] ?? null,
+                    ];
+                }
+
+                $breakdown[$label]['count'] += max(0, (int) ($entry['count'] ?? 0));
+
+                if (!$breakdown[$label]['method'] && !empty($entry['method'])) {
+                    $breakdown[$label]['method'] = $entry['method'];
+                }
+
+                if (!$breakdown[$label]['host'] && !empty($entry['host'])) {
+                    $breakdown[$label]['host'] = $entry['host'];
+                }
+
+                if (!$breakdown[$label]['path'] && !empty($entry['path'])) {
+                    $breakdown[$label]['path'] = $entry['path'];
+                }
+            }
+        }
+
+        if (!$hasData) {
+            return [
+                'total'     => null,
+                'breakdown' => [],
+                'runs'      => $completionLogs->count(),
+            ];
+        }
+
+        $entries = array_values($breakdown);
+        usort($entries, static fn ($a, $b) => $b['count'] <=> $a['count']);
+
+        return [
+            'total'     => $total,
+            'breakdown' => $entries,
+            'runs'      => $completionLogs->count(),
+        ];
     }
 }

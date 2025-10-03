@@ -12,11 +12,14 @@
     $statusCounts = $summary['status_breakdown'] ?? [];
     $statusTotal = max(1, array_sum(array_map('intval', $statusCounts)));
     $latestRun = $summary['recent_runs']->first();
+    $latestApi = $latestRun['api_calls'] ?? null;
+    $windowApi = $summary['api_window_summary'] ?? null;
     $accentPalette = [
         'indigo' => 'rgba(129, 140, 248, 0.6)',
         'emerald' => 'rgba(16, 185, 129, 0.6)',
         'amber' => 'rgba(245, 158, 11, 0.6)',
         'rose' => 'rgba(244, 114, 182, 0.6)',
+        'cyan' => 'rgba(6, 182, 212, 0.6)',
     ];
 @endphp
 
@@ -60,6 +63,91 @@
                 <span class="badge">Errors {{ $statusCounts['error'] ?? 0 }}</span>
                 <span class="badge">Warnings {{ $statusCounts['warning'] ?? 0 }}</span>
                 <span class="badge">Success {{ $statusCounts['success'] ?? 0 }}</span>
+            </div>
+        </div>
+        <div class="card" style="border-top: 3px solid {{ $accentPalette[$job['accent']] ?? 'rgba(148,163,184,0.35)' }}; grid-column: span 2; min-width: 320px;">
+            <div class="card-title">API usage</div>
+            <p class="card-subtitle">Compare the latest run with the aggregated behaviour inside the current time window.</p>
+
+            <div class="metrics-row" style="margin-top: 16px;">
+                @if(!is_null($latestApi['total'] ?? null))
+                    <div class="metric">
+                        <span class="stat-label">Latest run calls</span>
+                        <span class="stat-value">{{ number_format($latestApi['total']) }}</span>
+                        <span class="card-subtitle">Most recent completion</span>
+                    </div>
+                @else
+                    <div class="metric">
+                        <span class="stat-label">Latest run calls</span>
+                        <span class="stat-value">—</span>
+                        <span class="card-subtitle">No telemetry recorded</span>
+                    </div>
+                @endif
+
+                @if(!is_null($windowApi['total'] ?? null))
+                    <div class="metric">
+                        <span class="stat-label">Window total</span>
+                        <span class="stat-value">{{ number_format($windowApi['total']) }}</span>
+                        <span class="card-subtitle">{{ $summary['window_days'] }} day span</span>
+                    </div>
+                @else
+                    <div class="metric">
+                        <span class="stat-label">Window total</span>
+                        <span class="stat-value">—</span>
+                        <span class="card-subtitle">No telemetry recorded</span>
+                    </div>
+                @endif
+
+                <div class="metric">
+                    <span class="stat-label">Runs in window</span>
+                    <span class="stat-value">{{ number_format($windowApi['runs'] ?? 0) }}</span>
+                    <span class="card-subtitle">Included executions</span>
+                </div>
+            </div>
+
+            <div class="card-subtitle" style="margin-top: 18px;">Endpoint breakdown</div>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px;">
+                <div class="card" style="padding: 16px; background: rgba(129,140,248,0.07); border: 1px solid rgba(129,140,248,0.18);">
+                    <div class="section-subtitle" style="margin-bottom: 8px;">Latest run</div>
+                    @if(!empty($latestApi['breakdown']))
+                        <ul style="margin: 0; padding-left: 18px;">
+                            @foreach(array_slice($latestApi['breakdown'], 0, 6) as $entry)
+                                @php
+                                    $endpointLabel = $entry['label'];
+                                    if (!empty($entry['method']) && !empty($entry['path'])) {
+                                        $endpointLabel = $entry['method'] . ' ' . $entry['path'];
+                                    } elseif (!empty($entry['method']) && !empty($entry['host'])) {
+                                        $endpointLabel = $entry['method'] . ' ' . $entry['host'];
+                                    }
+                                @endphp
+                                <li class="card-subtitle" style="margin-bottom: 6px;">{{ $endpointLabel }} · <strong>{{ number_format($entry['count']) }}</strong></li>
+                            @endforeach
+                        </ul>
+                    @else
+                        <div class="card-subtitle">No endpoints recorded.</div>
+                    @endif
+                </div>
+
+                <div class="card" style="padding: 16px; background: rgba(20,184,166,0.07); border: 1px solid rgba(20,184,166,0.18);">
+                    <div class="section-subtitle" style="margin-bottom: 8px;">{{ $summary['window_days'] }} day window</div>
+                    @if(!empty($windowApi['breakdown']))
+                        <ul style="margin: 0; padding-left: 18px;">
+                            @foreach(array_slice($windowApi['breakdown'], 0, 8) as $entry)
+                                @php
+                                    $endpointLabel = $entry['label'];
+                                    if (!empty($entry['method']) && !empty($entry['path'])) {
+                                        $endpointLabel = $entry['method'] . ' ' . $entry['path'];
+                                    } elseif (!empty($entry['method']) && !empty($entry['host'])) {
+                                        $endpointLabel = $entry['method'] . ' ' . $entry['host'];
+                                    }
+                                @endphp
+                                <li class="card-subtitle" style="margin-bottom: 6px;">{{ $endpointLabel }} · <strong>{{ number_format($entry['count']) }}</strong></li>
+                            @endforeach
+                        </ul>
+                    @else
+                        <div class="card-subtitle">No endpoints recorded in this window.</div>
+                    @endif
+                </div>
             </div>
         </div>
     </div>
@@ -106,11 +194,12 @@
                     <th>Status</th>
                     <th>Started</th>
                     <th>Finished</th>
-                    <th>Duration</th>
-                    <th>Events</th>
-                    <th>Errors</th>
-                    <th>Warnings</th>
-                    <th>Success</th>
+                            <th>Duration</th>
+                            <th>API calls</th>
+                            <th>Events</th>
+                            <th>Errors</th>
+                            <th>Warnings</th>
+                            <th>Success</th>
                 </tr>
                 </thead>
                 <tbody>
@@ -130,6 +219,7 @@
                         <td>{{ $run->started_at?->format('M j · H:i:s') ?? '—' }}</td>
                         <td>{{ $run->finished_at?->format('M j · H:i:s') ?? '—' }}</td>
                         <td>{{ $run->duration_human ?? '—' }}</td>
+                        <td>{{ isset($run->api_call_total) && !is_null($run->api_call_total) ? number_format($run->api_call_total) : '—' }}</td>
                         <td>{{ $run->event_count }}</td>
                         <td>{{ $run->error_count }}</td>
                         <td>{{ $run->warning_count }}</td>
@@ -137,7 +227,7 @@
                     </tr>
                 @empty
                     <tr>
-                        <td colspan="9">
+                        <td colspan="10">
                             <div class="empty-state">No runs recorded yet.</div>
                         </td>
                     </tr>

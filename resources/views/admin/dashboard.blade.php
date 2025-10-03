@@ -14,6 +14,7 @@
         'emerald' => 'rgba(16, 185, 129, 0.6)',
         'amber' => 'rgba(245, 158, 11, 0.6)',
         'rose' => 'rgba(244, 114, 182, 0.6)',
+        'cyan' => 'rgba(6, 182, 212, 0.6)',
     ];
 
     $aggregateIssues = collect($summaries)
@@ -53,6 +54,12 @@
                 $statusCounts = $summary['status_breakdown'] ?? [];
                 $statusOrder = ['error', 'warning', 'success', 'info'];
                 $statusTotal = max(1, array_sum(array_map('intval', $statusCounts)));
+                $latestApi = $latestRun['api_calls'] ?? null;
+                $latestApiTotal = $latestApi['total'] ?? null;
+                $latestApiBreakdown = $latestApi['breakdown'] ?? [];
+                $windowApi = $summary['api_window_summary'] ?? null;
+                $windowApiTotal = $windowApi['total'] ?? null;
+                $windowApiBreakdown = $windowApi['breakdown'] ?? [];
             @endphp
             <a class="card" href="{{ route('admin.jobs.show', $summary['key']) }}" style="border-top: 3px solid {{ $accentPalette[$summary['accent']] ?? 'rgba(148,163,184,0.35)' }};">
                 <div class="card-header">
@@ -78,6 +85,18 @@
                         </span>
                         <span class="stat-label">Last activity</span>
                     </div>
+                    @if(!is_null($windowApiTotal))
+                        <div class="metric">
+                            <span class="stat-value">{{ number_format($windowApiTotal) }}</span>
+                            <span class="stat-label">API calls ({{ $summary['window_days'] }} day window)</span>
+                        </div>
+                    @endif
+                    @if(!is_null($latestApiTotal))
+                        <div class="metric">
+                            <span class="stat-value">{{ number_format($latestApiTotal) }}</span>
+                            <span class="stat-label">API calls (latest run)</span>
+                        </div>
+                    @endif
                 </div>
 
                 <div>
@@ -99,6 +118,44 @@
                         <span class="badge">Success {{ $statusCounts['success'] ?? 0 }}</span>
                     </div>
                 </div>
+
+                @if(!is_null($windowApiTotal))
+                    <div class="section-subtitle" style="margin-top: 16px;">API usage ({{ $summary['window_days'] }} day window)</div>
+                    <div class="card-subtitle" style="margin-bottom: 8px;">Total {{ number_format($windowApiTotal) }} calls across {{ $windowApi['runs'] ?? 0 }} run{{ ($windowApi['runs'] ?? 0) === 1 ? '' : 's' }}</div>
+                    <div class="card-subtitle" style="display: flex; gap: 8px; flex-wrap: wrap;">
+                        @forelse(array_slice($windowApiBreakdown, 0, 4) as $entry)
+                            @php
+                                $endpointLabel = $entry['label'];
+                                if (!empty($entry['method']) && !empty($entry['path'])) {
+                                    $endpointLabel = $entry['method'] . ' ' . $entry['path'];
+                                } elseif (!empty($entry['method']) && !empty($entry['host'])) {
+                                    $endpointLabel = $entry['method'] . ' ' . $entry['host'];
+                                }
+                            @endphp
+                            <span class="badge">{{ $endpointLabel }} · {{ number_format($entry['count']) }}</span>
+                        @empty
+                            <span class="badge">No endpoint breakdown captured.</span>
+                        @endforelse
+                    </div>
+                @endif
+
+                @if(!is_null($latestApiTotal))
+                    <div class="section-subtitle" style="margin-top: 12px;">API usage (latest run)</div>
+                    <div class="card-subtitle" style="display: flex; gap: 8px; flex-wrap: wrap;">
+                        <span class="badge" style="background: rgba(129, 140, 248, 0.15);">Total {{ number_format($latestApiTotal) }}</span>
+                        @foreach(array_slice($latestApiBreakdown, 0, 3) as $entry)
+                            @php
+                                $endpointLabel = $entry['label'];
+                                if (!empty($entry['method']) && !empty($entry['path'])) {
+                                    $endpointLabel = $entry['method'] . ' ' . $entry['path'];
+                                } elseif (!empty($entry['method']) && !empty($entry['host'])) {
+                                    $endpointLabel = $entry['method'] . ' ' . $entry['host'];
+                                }
+                            @endphp
+                            <span class="badge">{{ $endpointLabel }} · {{ number_format($entry['count']) }}</span>
+                        @endforeach
+                    </div>
+                @endif
 
                 @if($latestRun)
                     <div class="card-subtitle" style="margin-top: auto;">Latest run · {{ $latestRun['run_id'] }} · {{ $latestRun['finished_at']?->diffForHumans($appNow) }}</div>
@@ -161,6 +218,7 @@
                             <th>Started</th>
                             <th>Finished</th>
                             <th>Duration</th>
+                            <th>API calls</th>
                             <th>Events</th>
                         </tr>
                         </thead>
@@ -181,6 +239,7 @@
                                 <td>{{ $run['started_at']?->format('M j · H:i:s') ?? '—' }}</td>
                                 <td>{{ $run['finished_at']?->diffForHumans($appNow) ?? '—' }}</td>
                                 <td>{{ $run['duration_human'] ?? '—' }}</td>
+                                <td>{{ isset($run['api_call_total']) && !is_null($run['api_call_total']) ? number_format($run['api_call_total']) : '—' }}</td>
                                 <td>{{ $run['total_events'] }}</td>
                             </tr>
                         @endforeach

@@ -26,7 +26,6 @@ class SyncSeriesDataJob implements ShouldQueue
     private string $apiHost;
     private SeriesSyncLogger $logger;
 
-    private int $apiCallCount = 0;
     private int $seriesStored = 0;
     private int $seriesFailed = 0;
     private int $matchesStored = 0;
@@ -466,12 +465,13 @@ class SyncSeriesDataJob implements ShouldQueue
     private function makeApiRequest(string $url, string $action)
     {
         try {
+            $this->recordApiCall($url, 'GET', $action);
+
             $response = Http::withHeaders([
                 'x-rapidapi-host' => $this->apiHost,
                 'x-rapidapi-key'  => $this->apiKey,
             ])->get($url);
 
-            $this->apiCallCount++;
             $context = $this->responseContext($response, [
                 'action' => $action,
                 'url'    => $url,
@@ -486,7 +486,6 @@ class SyncSeriesDataJob implements ShouldQueue
 
             return $response;
         } catch (Throwable $e) {
-            $this->apiCallCount++;
             $context = $this->exceptionContext($e, [
                 'action' => $action,
                 'url'    => $url,
@@ -516,8 +515,11 @@ class SyncSeriesDataJob implements ShouldQueue
 
     private function finalize(string $status): void
     {
+        $apiCallSummary = $this->getApiCallBreakdown();
+
         $this->logger->log('job_finished', $status, 'SyncSeriesData job completed', [
-            'apiCalls'       => $this->apiCallCount,
+            'apiCalls'       => $apiCallSummary['total'],
+            'apiCallBreakdown' => $apiCallSummary['breakdown'],
             'seriesStored'   => $this->seriesStored,
             'seriesFailed'   => $this->seriesFailed,
             'matchesStored'  => $this->matchesStored,

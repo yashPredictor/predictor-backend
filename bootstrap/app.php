@@ -2,6 +2,7 @@
 
 use App\Jobs\SyncLiveMatchesJob;
 use App\Jobs\SyncMatchOversJob;
+use App\Jobs\SyncScorecardJob;
 use App\Jobs\SyncSeriesDataJob;
 use App\Services\PauseWindowService;
 use Illuminate\Console\Scheduling\Schedule;
@@ -16,20 +17,24 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withSchedule(function (Schedule $schedule): void {
-        $shouldRun = static fn (): bool => !app(PauseWindowService::class)->isPaused();
+        $shouldRun = static fn(): bool => !app(PauseWindowService::class)->isPaused();
 
         $schedule->job(new SyncSeriesDataJob())
             ->cron('0 0 */3 * *')
             ->withoutOverlapping()
             ->when($shouldRun);
-
         $schedule->job(new SyncLiveMatchesJob())
-            ->everyMinute()
+            ->everyFiveMinutes()
             ->withoutOverlapping()
             ->when($shouldRun);
 
         $schedule->job(new SyncMatchOversJob())
-            ->everyThirtySeconds()
+            ->everyMinute()
+            ->withoutOverlapping()
+            ->when($shouldRun);
+
+        $schedule->job(new SyncScorecardJob())
+            ->everyMinute()
             ->withoutOverlapping()
             ->when($shouldRun);
     })
@@ -38,6 +43,4 @@ return Application::configure(basePath: dirname(__DIR__))
             'auth' => App\Http\Middleware\Authenticate::class,
         ]);
     })
-    ->withExceptions(function (Exceptions $exceptions): void {
-        
-    })->create();
+    ->withExceptions(function (Exceptions $exceptions): void {})->create();

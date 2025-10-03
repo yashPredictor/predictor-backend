@@ -65,8 +65,17 @@ class SyncLiveMatchesJob implements ShouldQueue
 
         $matches = $this->fetchLiveMatches();
         if (empty($matches)) {
+            $apiSummary = $this->getApiCallBreakdown();
             $this->log('live_matches_empty', 'warning', 'No live matches returned by API', [
                 'requested_ids' => $this->matchIds,
+                'api_calls'     => $apiSummary,
+            ]);
+            $this->log('job_completed', 'warning', 'SyncLiveMatches job finished', [
+                'synced'        => 0,
+                'skipped'       => 0,
+                'failures'      => [],
+                'requested_ids' => $this->matchIds,
+                'api_calls'     => $apiSummary,
             ]);
             return;
         }
@@ -174,11 +183,14 @@ class SyncLiveMatchesJob implements ShouldQueue
             }
         }
 
+        $apiSummary = $this->getApiCallBreakdown();
+
         $this->log('job_completed', empty($failures) ? 'success' : 'warning', 'SyncLiveMatches job finished', [
             'synced'        => $synced,
             'skipped'       => $skipped,
             'failures'      => array_values(array_unique(array_filter($failures))),
             'requested_ids' => $this->matchIds,
+            'api_calls'     => $apiSummary,
         ]);
     }
 
@@ -225,6 +237,7 @@ class SyncLiveMatchesJob implements ShouldQueue
         ];
 
         try {
+            $this->recordApiCall($endpoint, 'GET', 'live_matches');
             $response = Http::withHeaders($headers)->get($endpoint);
         } catch (Throwable $e) {
             $this->log('api_request_failed', 'error', 'Live matches request failed', $this->exceptionContext($e, [

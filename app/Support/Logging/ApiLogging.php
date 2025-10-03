@@ -7,6 +7,13 @@ use Throwable;
 
 trait ApiLogging
 {
+    protected int $apiCallTotal = 0;
+
+    /**
+     * @var array<string, array{count:int, method:string, host:?string, path:?string}>
+     */
+    protected array $apiCallTracker = [];
+
     protected function responseContext(?Response $response, array $extra = []): array
     {
         if ($response === null) {
@@ -39,5 +46,46 @@ trait ApiLogging
                 'trace'   => $exception->getTraceAsString(),
             ],
         ]);
+    }
+
+    protected function recordApiCall(string $url, string $method = 'GET', ?string $tag = null): void
+    {
+        $method = strtoupper($method);
+        $parts  = parse_url($url);
+        $host   = $parts['host'] ?? null;
+        $path   = $parts['path'] ?? null;
+
+        $key = $tag ?? ($method . ' ' . ($host ? $host . ($path ?? '') : $url));
+
+        if (!isset($this->apiCallTracker[$key])) {
+            $this->apiCallTracker[$key] = [
+                'count'  => 0,
+                'method' => $method,
+                'host'   => $host,
+                'path'   => $path,
+            ];
+        }
+
+        $this->apiCallTracker[$key]['count']++;
+        $this->apiCallTotal++;
+    }
+
+    protected function getApiCallBreakdown(): array
+    {
+        $breakdown = [];
+
+        foreach ($this->apiCallTracker as $label => $entry) {
+            $breakdown[$label] = [
+                'count'  => $entry['count'],
+                'method' => $entry['method'],
+                'host'   => $entry['host'],
+                'path'   => $entry['path'],
+            ];
+        }
+
+        return [
+            'total'     => $this->apiCallTotal,
+            'breakdown' => $breakdown,
+        ];
     }
 }

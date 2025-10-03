@@ -43,5 +43,8 @@ return [
     'firestore' => [
         'project_id' => env('FIRESTORE_PROJECT_ID'),
         'sa_json'    => env('FIRESTORE_SA_JSON'),
+        'matches_collection'    => env('FIRESTORE_MATCHES_COLLECTION', 'matches'),
+        'scorecards_collection' => env('FIRESTORE_SCORECARDS_COLLECTION', 'scorecards'),
+        'squads_collection'     => env('FIRESTORE_SQUADS_COLLECTION', 'squads'),
     ],
 ];

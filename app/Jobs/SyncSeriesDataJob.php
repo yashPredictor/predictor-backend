@@ -211,6 +211,21 @@ class SyncSeriesDataJob implements ShouldQueue
                 continue;
             }
 
+            try {
+                $seriesDataRef = $this->firestore->collection('seriesData')->document($type);
+                $bulk->set($seriesDataRef, $json);
+                $this->logger->log('series_data_store', 'success', "Stored series data block {$type}", [
+                    'series_type'              => $type,
+                    'series_map_proto_segments' => is_array($json['seriesMapProto'] ?? null)
+                        ? count($json['seriesMapProto'])
+                        : 0,
+                ]);
+            } catch (Throwable $e) {
+                $this->recordFailure('series_data_store', "Failed to store series data block {$type}", [
+                    'series_type' => $type,
+                ], $e);
+            }
+
             foreach ($json['seriesMapProto'] as $monthData) {
                 if (!isset($monthData['series']) || !is_array($monthData['series'])) {
                     continue;

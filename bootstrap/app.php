@@ -19,24 +19,24 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withSchedule(function (Schedule $schedule): void {
         $shouldRun = static fn(): bool => !app(PauseWindowService::class)->isPaused();
 
-        $schedule->job(new SyncSeriesDataJob())
-            ->cron('0 0 */3 * *')
-            ->withoutOverlapping()
-            ->when($shouldRun);
-        $schedule->job(new SyncLiveMatchesJob())
-            ->everyFiveMinutes()
-            ->withoutOverlapping()
-            ->when($shouldRun);
+        // $schedule->job(new SyncSeriesDataJob())
+        //     ->cron('0 0 */3 * *')
+        //     ->withoutOverlapping()
+        //     ->when($shouldRun);
+        // $schedule->job(new SyncLiveMatchesJob())
+        //     ->everyFiveMinutes()
+        //     ->withoutOverlapping()
+        //     ->when($shouldRun);
 
-        $schedule->job(new SyncMatchOversJob())
-            ->everyMinute()
-            ->withoutOverlapping()
-            ->when($shouldRun);
+        // $schedule->job(new SyncMatchOversJob())
+        //     ->everyMinute()
+        //     ->withoutOverlapping()
+        //     ->when($shouldRun);
 
-        $schedule->job(new SyncScorecardJob())
-            ->everyMinute()
-            ->withoutOverlapping()
-            ->when($shouldRun);
+        // $schedule->job(new SyncScorecardJob())
+        //     ->everyMinute()
+        //     ->withoutOverlapping()
+        //     ->when($shouldRun);
     })
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->alias([

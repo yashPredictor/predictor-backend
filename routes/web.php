@@ -3,6 +3,10 @@
 use App\Http\Controllers\Admin\AuthController;
 use App\Http\Controllers\Admin\CronDashboardController;
 use App\Http\Controllers\Admin\PauseWindowController;
+use Google\Cloud\Core\Timestamp as GoogleTimestamp;
+use Google\Cloud\Firestore\FieldValue;
+use Google\Cloud\Firestore\FirestoreClient;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('/')->name('admin.')->group(function () {
@@ -19,6 +23,10 @@ Route::prefix('/')->name('admin.')->group(function () {
         Route::put('/pause-window', [PauseWindowController::class, 'update'])->name('pause-window.update');
         Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
     });
+});
+
+Route::get('/server-time', function () {
+    return now()->valueOf();
 });
 
 Route::fallback(function () {

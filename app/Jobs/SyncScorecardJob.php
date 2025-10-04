@@ -18,10 +18,12 @@ class SyncScorecardJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels, ApiLogging;
 
-    private const SCORECARD_STALE_AFTER_MS = 60_000; // 1 minute
-    private const SQUAD_STALE_AFTER_MS     = 600_000; // 10 minutes
+    private const SCORECARD_STALE_AFTER_MS = 60_000;
+
+    private const SQUAD_STALE_AFTER_MS     = 600_000;
 
     public int $timeout = 600;
+
     public int $tries   = 5;
 
     private ?FirestoreClient $firestore = null;
@@ -139,19 +141,19 @@ class SyncScorecardJob implements ShouldQueue
             ]));
         }
 
-        try {
-            $squadsSynced = $this->syncSquads($matchId);
-            if ($squadsSynced) {
-                $this->squadsSynced++;
-            } else {
-                $this->squadsSkipped++;
-            }
-        } catch (Throwable $e) {
-            $this->squadsFailed++;
-            $this->log('squads_sync_failed', 'error', 'Failed to sync squads', $this->exceptionContext($e, [
-                'match_id' => $matchId,
-            ]));
-        }
+        // try {
+        //     $squadsSynced = $this->syncSquads($matchId);
+        //     if ($squadsSynced) {
+        //         $this->squadsSynced++;
+        //     } else {
+        //         $this->squadsSkipped++;
+        //     }
+        // } catch (Throwable $e) {
+        //     $this->squadsFailed++;
+        //     $this->log('squads_sync_failed', 'error', 'Failed to sync squads', $this->exceptionContext($e, [
+        //         'match_id' => $matchId,
+        //     ]));
+        // }
     }
 
     private function syncScorecard(string $matchId): bool

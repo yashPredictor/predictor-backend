@@ -9,7 +9,7 @@ use Illuminate\Support\Str;
 
 class SyncScorecards extends Command
 {
-    protected $signature = 'scorecards:sync {--matchId=* : Sync scorecards for specific match IDs only.}';
+    protected $signature = 'app:scorecards-sync {--matchId=* : Sync scorecards for specific match IDs only.}';
     protected $description = 'Dispatches a queue job to refresh scorecards and squads for live matches.';
 
     /**

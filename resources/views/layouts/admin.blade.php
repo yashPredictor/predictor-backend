@@ -178,7 +178,7 @@
 
         .cards-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            grid-template-columns: repeat(4, minmax(280px, 1fr));
             gap: 24px;
         }
 
@@ -672,11 +672,18 @@
                 @endphp
                 @foreach ($navItems as $item)
                     @php
-                        $active = collect($item['pattern'] ?? [])->contains(function ($pattern) {
-                            return request()->is($pattern);
-                        });
+                        $active = $item['active'] ?? null;
+
+                        if (!is_bool($active)) {
+                            $patterns = (array) ($item['pattern'] ?? []);
+                            $active = collect($patterns)->contains(function ($pattern) {
+                                return request()->is($pattern);
+                            });
+                        }
+
+                        $href = $item['href'] ?? '#';
                     @endphp
-                    <a class="nav-link {{ $active ? 'active' : '' }}" href="{{ $item['href'] }}">
+                    <a class="nav-link {{ $active ? 'active' : '' }}" href="{{ $href }}">
                         <span class="nav-dot"></span>
                         <span>{{ $item['label'] }}</span>
                     </a>

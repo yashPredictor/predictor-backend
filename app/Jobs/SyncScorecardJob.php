@@ -211,14 +211,7 @@ class SyncScorecardJob implements ShouldQueue
             return false;
         }
 
-        $documentPayload = [
-            'scorecard'   => $payload,
-            'lastFetched' => now()->valueOf(),
-            'serverTime'  => now()->toIso8601String(),
-            'apiUpdatedAt' => (int) (data_get($payload, 'matchHeader.lastUpdated') ?? 0),
-        ];
-
-        $docRef->set($documentPayload, ['merge' => true]);
+        $docRef->set($payload, ['merge' => true]);
 
         $this->log('scorecard_synced', 'success', 'Stored scorecard in Firestore', [
             'match_id' => $matchId,
@@ -288,11 +281,10 @@ class SyncScorecardJob implements ShouldQueue
             return false;
         }
 
-        $documentPayload = [
-            'squads'      => $payload,
+        $documentPayload = array_merge($payload, [
             'lastFetched' => now()->valueOf(),
             'serverTime'  => now()->toIso8601String(),
-        ];
+        ]);
 
         $docRef->set($documentPayload, ['merge' => true]);
 

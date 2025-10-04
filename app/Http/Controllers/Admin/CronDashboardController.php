@@ -171,29 +171,34 @@ class CronDashboardController extends Controller
      */
     public static function navItems(): array
     {
+        $route      = request()->route();
+        $routeName  = $route?->getName() ?? '';
+        $currentJob = (string) ($route?->parameter('job') ?? '');
+
         $items = [
             [
-                'key'     => 'dashboard',
-                'label'   => 'Overview',
-                'href'    => route('admin.dashboard'),
-                'pattern' => ['admin-yash'],
+                'key'    => 'dashboard',
+                'label'  => 'Overview',
+                'href'   => route('admin.dashboard'),
+                'active' => $routeName === 'admin.dashboard',
             ],
         ];
 
         foreach (self::JOBS as $key => $config) {
             $items[] = [
-                'key'     => $key,
-                'label'   => $config['label'],
-                'href'    => route('admin.jobs.show', $key),
-                'pattern' => ['admin-yash/jobs/' . $key . '*'],
+                'key'    => $key,
+                'label'  => $config['label'],
+                'href'   => route('admin.jobs.show', $key),
+                'active' => in_array($routeName, ['admin.jobs.show', 'admin.jobs.runs.show'], true)
+                    && $currentJob === $key,
             ];
         }
 
         $items[] = [
-            'key'     => 'pause-window',
-            'label'   => 'Pause Window',
-            'href'    => route('admin.pause-window.edit'),
-            'pattern' => ['admin-yash/pause-window*'],
+            'key'    => 'pause-window',
+            'label'  => 'Pause Window',
+            'href'   => route('admin.pause-window.edit'),
+            'active' => str_starts_with($routeName, 'admin.pause-window.'),
         ];
 
         return $items;

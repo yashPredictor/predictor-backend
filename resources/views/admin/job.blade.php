@@ -22,6 +22,8 @@
         'cyan' => 'rgba(6, 182, 212, 0.6)',
     ];
 
+    $statusFilter = $statusFilter ?? null;
+
     $recentRunsForChart = $summary['recent_runs']->reverse()->values();
     $runChartData = [
         'labels'   => $recentRunsForChart->map(fn ($run) => \Illuminate\Support\Str::limit($run['run_id'] ?? 'run', 8))->values(),
@@ -175,8 +177,8 @@
                 <span class="badge">Last {{ max(1, $recentRunsForChart->count()) }} runs</span>
             </div>
             <p class="section-subtitle">Track API calls and runtime duration across the latest executions.</p>
-            <div style="position: relative; min-height: 260px;">
-                <canvas id="job-run-trend-chart" height="240"></canvas>
+            <div style="position: relative; min-height: 220px;">
+                <canvas id="job-run-trend-chart" height="200"></canvas>
             </div>
         </div>
 
@@ -185,8 +187,8 @@
                 <span>Status distribution (window)</span>
             </div>
             <p class="section-subtitle">Proportion of status events recorded inside the selected window.</p>
-            <div style="position: relative; min-height: 260px;">
-                <canvas id="job-status-chart" height="240"></canvas>
+            <div style="position: relative; min-height: 220px;">
+                <canvas id="job-status-chart" height="200"></canvas>
             </div>
         </div>
     </div>
@@ -197,6 +199,7 @@
             <div class="toolbar">
                 <form method="get" class="toolbar" style="gap: 10px;">
                     <input type="hidden" name="run" value="{{ $search }}" />
+                    <input type="hidden" name="status" value="{{ $statusFilter }}" />
                     <div class="input-group">
                         <label for="days" style="font-size: 0.8rem; color: var(--text-muted); margin-right: 6px;">Window</label>
                         <select id="days" name="days">
@@ -217,8 +220,16 @@
                 @if($days)
                     <input type="hidden" name="days" value="{{ $days }}">
                 @endif
-                <div class="input-group">
+                <div class="input-group" style="max-width: 220px;">
                     <input type="search" name="run" value="{{ $search }}" placeholder="Filter by run id" aria-label="Filter by run id">
+                </div>
+                <div class="input-group">
+                    <select name="status" aria-label="Filter by status">
+                        <option value="" @selected(!$statusFilter)>All statuses</option>
+                        @foreach(['success', 'warning', 'error', 'info'] as $statusOption)
+                            <option value="{{ $statusOption }}" @selected($statusFilter === $statusOption)>{{ ucfirst($statusOption) }}</option>
+                        @endforeach
+                    </select>
                 </div>
                 <button type="submit" class="btn btn-secondary">Search</button>
                 <a href="{{ route('admin.jobs.show', [$job['key']]) }}" class="btn btn-secondary">Reset</a>

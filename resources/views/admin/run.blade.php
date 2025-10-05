@@ -23,6 +23,9 @@
         'cyan' => 'rgba(6, 182, 212, 0.6)',
     ];
 
+    $statusFilter = $statusFilter ?? null;
+    $searchTerm = $searchTerm ?? '';
+
     $statusChartData = [
         'labels' => ['Errors', 'Warnings', 'Success', 'Info'],
         'data'   => [
@@ -99,14 +102,30 @@
             <div class="card-subtitle" style="margin-top: 18px;">Summary: {{ $run['summary_message'] }}</div>
         @endif
 
+        <form method="get" class="toolbar" style="margin-top: 22px; gap: 12px; flex-wrap: wrap;">
+            <div class="input-group" style="max-width: 260px;">
+                <input type="search" name="q" value="{{ $searchTerm }}" placeholder="Search message or action" aria-label="Search log entries">
+            </div>
+            <div class="input-group">
+                <select name="status" aria-label="Filter by status">
+                    <option value="" @selected(!$statusFilter)>All statuses</option>
+                    @foreach(['success', 'warning', 'error', 'info'] as $statusOption)
+                        <option value="{{ $statusOption }}" @selected($statusFilter === $statusOption)>{{ ucfirst($statusOption) }}</option>
+                    @endforeach
+                </select>
+            </div>
+            <button type="submit" class="btn btn-secondary">Apply filters</button>
+            <a href="{{ route('admin.jobs.runs.show', [$job['key'], $run['run_id']]) }}" class="btn btn-secondary">Reset</a>
+        </form>
+
         <div class="metrics-row" style="margin-top: 24px; flex-wrap: wrap;">
             <div class="chart-card">
                 <div class="section-subtitle" style="margin: 0 0 12px;">Event distribution</div>
-                <canvas id="run-status-chart" height="220"></canvas>
+                <canvas id="run-status-chart" height="180"></canvas>
             </div>
             <div class="chart-card">
                 <div class="section-subtitle" style="margin: 0 0 12px;">API calls breakdown</div>
-                <canvas id="run-api-chart" height="220"></canvas>
+                <canvas id="run-api-chart" height="180"></canvas>
             </div>
         </div>
 

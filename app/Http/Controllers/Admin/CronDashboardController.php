@@ -78,6 +78,7 @@ class CronDashboardController extends Controller
     {
         $jobConfig = $this->resolveJob($job);
         $window    = max(1, (int) $request->input('days', 7));
+        $statusFilter = $this->validatedStatus($request->input('status'));
         $summary   = $this->buildSummary($job, $jobConfig, $window);
 
         $modelClass = $jobConfig['model'];
@@ -94,6 +95,10 @@ class CronDashboardController extends Controller
 
         if ($search = trim((string) $request->input('run'))) {
             $runsQuery->where('run_id', 'like', "%{$search}%");
+        }
+
+        if ($statusFilter) {
+            $runsQuery->having('final_status', '=', $statusFilter);
         }
 
         $runs = $runsQuery
@@ -147,16 +152,27 @@ class CronDashboardController extends Controller
             'runs'      => $runs,
             'search'    => $search,
             'days'      => $window,
+            'statusFilter' => $statusFilter,
         ]);
     }
 
-    public function run(string $job, string $runId)
+    public function run(Request $request, string $job, string $runId)
     {
         $jobConfig = $this->resolveJob($job);
         $modelClass = $jobConfig['model'];
 
+        $statusFilter = $this->validatedStatus($request->input('status'));
+        $search       = trim((string) $request->input('q', ''));
+
         $logsQuery = $modelClass::query()
             ->where('run_id', $runId)
+            ->when($statusFilter, fn ($query) => $query->where('status', $statusFilter))
+            ->when($search !== '', function ($query) use ($search) {
+                $query->where(function ($inner) use ($search) {
+                    $inner->where('message', 'like', "%{$search}%")
+                        ->orWhere('action', 'like', "%{$search}%");
+                });
+            })
             ->orderBy('created_at');
 
         $allLogs = (clone $logsQuery)->get();
@@ -176,6 +192,8 @@ class CronDashboardController extends Controller
             'run'       => $summary,
             'logs'      => $logs,
             'logTotal'  => $allLogs->count(),
+            'statusFilter' => $statusFilter,
+            'searchTerm'   => $search,
         ]);
     }
 
@@ -229,6 +247,17 @@ class CronDashboardController extends Controller
         ];
 
         return $items;
+    }
+
+    private function validatedStatus(?string $status): ?string
+    {
+        if (!is_string($status)) {
+            return null;
+        }
+
+        $status = strtolower(trim($status));
+
+        return in_array($status, ['success', 'warning', 'error', 'info'], true) ? $status : null;
     }
 
     protected function resolveJob(string $job): array

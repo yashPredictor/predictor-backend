@@ -314,7 +314,7 @@
 
         .chart-card canvas {
             width: 100%;
-            height: 220px;
+            height: 180px;
         }
 
         .metric {

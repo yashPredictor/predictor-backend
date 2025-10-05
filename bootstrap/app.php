@@ -37,20 +37,20 @@ return Application::configure(basePath: dirname(__DIR__))
         //     ->withoutOverlapping()
         //     ->when($shouldRun);
 
-        $schedule->job(new SyncScorecardJob())
-            ->everyThirtySeconds()
-            ->withoutOverlapping()
-            ->when($shouldRun);
+        // $schedule->job(new SyncScorecardJob())
+        //     ->everyThirtySeconds()
+        //     ->withoutOverlapping()
+        //     ->when($shouldRun);
 
-        $schedule->job(new SyncSquadJob())
-            ->dailyAt('06:00')
-            ->withoutOverlapping()
-            ->when($shouldRun);
+        // $schedule->job(new SyncSquadJob())
+        //     ->dailyAt('06:00')
+        //     ->withoutOverlapping()
+        //     ->when($shouldRun);
 
-        $schedule->command('logs:cleanup')
-            ->dailyAt('05:30')
-            ->withoutOverlapping()
-            ->when($shouldRun);
+        // $schedule->command('logs:cleanup')
+        //     ->dailyAt('05:30')
+        //     ->withoutOverlapping()
+        //     ->when($shouldRun);
     })
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->alias([

@@ -3,9 +3,10 @@
 namespace App\Jobs;
 
 use App\Services\AdminSettingsService;
-use App\Services\ScorecardSyncLogger;
+use App\Services\SquadSyncLogger;
 use App\Support\Logging\ApiLogging;
 use App\Support\Queue\Middleware\RespectPauseWindow;
+use Google\Cloud\Firestore\DocumentSnapshot;
 use Google\Cloud\Firestore\FirestoreClient;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -15,53 +16,39 @@ use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Http;
 use Throwable;
 
-class SyncScorecardJob implements ShouldQueue
+class SyncSquadJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels, ApiLogging;
 
-    private const SCORECARD_STALE_AFTER_MS = 60_000;
-    private const MATCHES_COLLECTION       = 'matches';
-    private const SCORECARDS_COLLECTION    = 'scorecards';
+    private const SQUAD_STALE_AFTER_MS = 600_000;
+
+    private const ALLOWED_STATES = ['preview', 'upcoming'];
+    private const MATCHES_COLLECTION = 'matches';
+    private const SQUADS_COLLECTION  = 'squads';
 
     public int $timeout = 600;
 
-    public int $tries   = 5;
+    public int $tries = 5;
 
     private ?FirestoreClient $firestore = null;
-    private ?string $apiKey             = null;
+    private ?string $apiKey = null;
     private string $apiHost;
     private string $baseUrl;
     private string $matchesCollection;
-    private string $scorecardsCollection;
-
-    private ScorecardSyncLogger $logger;
+    private string $squadsCollection;
+    private SquadSyncLogger $logger;
     private array $firestoreSettings = [];
     private array $cricbuzzSettings  = [];
 
     /** @var string[] */
-    private array $liveStates = [
-        "live",
-        "Live",
-        "current",
-        "Current",
-        "progress",
-        "Progress",
-        "inprogress",
-        "Inprogress",
-        "in progress",
-        "In progress",
-        "In Progress",
-    ];
-
-    /** @var string[] */
     private array $targetMatchIds = [];
 
-    private int $scorecardsSynced  = 0;
+    private int $squadsSynced = 0;
 
-    private int $scorecardsSkipped = 0;
-
-    private int $scorecardsFailed  = 0;
+    private int $squadsSkipped = 0;
     
+    private int $squadsFailed = 0;
+
     public function __construct(
         private readonly array $matchIds = [],
         private ?string $runId = null,
@@ -77,15 +64,15 @@ class SyncScorecardJob implements ShouldQueue
 
     public function handle(): void
     {
-        $this->apiHost             = config('services.cricbuzz.host', 'cricbuzz-cricket2.p.rapidapi.com');
-        $this->baseUrl             = sprintf('https://%s/mcenter/v1/', $this->apiHost);
-        $this->matchesCollection   = self::MATCHES_COLLECTION;
-        $this->scorecardsCollection = self::SCORECARDS_COLLECTION;
+        $this->apiHost           = config('services.cricbuzz.host', 'cricbuzz-cricket2.p.rapidapi.com');
+        $this->baseUrl           = sprintf('https://%s/mcenter/v1/', $this->apiHost);
+        $this->matchesCollection = self::MATCHES_COLLECTION;
+        $this->squadsCollection  = self::SQUADS_COLLECTION;
 
-        $this->logger = new ScorecardSyncLogger($this->runId);
+        $this->logger = new SquadSyncLogger($this->runId);
         $this->runId  = $this->logger->runId;
 
-        $this->log('job_started', 'info', 'SyncScorecard job started', [
+        $this->log('job_started', 'info', 'SyncSquad job started', [
             'requested_match_ids' => $this->matchIds,
             'timeout'             => $this->timeout,
             'tries'               => $this->tries,
@@ -95,10 +82,10 @@ class SyncScorecardJob implements ShouldQueue
         $this->firestoreSettings  = $settingsService->firestoreSettings();
         $this->cricbuzzSettings   = $settingsService->cricbuzzSettings();
 
-        $this->apiHost             = $this->cricbuzzSettings['host'] ?? $this->apiHost;
-        $this->baseUrl             = sprintf('https://%s/mcenter/v1/', $this->apiHost);
-        $this->matchesCollection   = self::MATCHES_COLLECTION;
-        $this->scorecardsCollection = self::SCORECARDS_COLLECTION;
+        $this->apiHost           = $this->cricbuzzSettings['host'] ?? $this->apiHost;
+        $this->baseUrl           = sprintf('https://%s/mcenter/v1/', $this->apiHost);
+        $this->matchesCollection = self::MATCHES_COLLECTION;
+        $this->squadsCollection  = self::SQUADS_COLLECTION;
 
         try {
             $this->firestore = $this->initializeClients();
@@ -113,7 +100,7 @@ class SyncScorecardJob implements ShouldQueue
 
         if (empty($this->targetMatchIds)) {
             $apiSummary = $this->getApiCallBreakdown();
-            $this->log('no_matches', 'warning', 'No live matches found for scorecard sync', [
+            $this->log('no_matches', 'warning', 'No upcoming matches found for squad sync', [
                 'requested_ids' => $this->matchIds,
                 'api_calls'     => $apiSummary,
             ]);
@@ -121,7 +108,7 @@ class SyncScorecardJob implements ShouldQueue
             return;
         }
 
-        $this->log('matches_resolved', 'info', 'Resolved match IDs for scorecard sync', [
+        $this->log('matches_resolved', 'info', 'Resolved match IDs for squad sync', [
             'match_count' => count($this->targetMatchIds),
             'match_ids'   => $this->targetMatchIds,
         ]);
@@ -130,88 +117,96 @@ class SyncScorecardJob implements ShouldQueue
             $this->processMatch($matchId);
         }
 
-        $status = $this->scorecardsFailed > 0 ? 'warning' : 'success';
+        $status = $this->squadsFailed > 0 ? 'warning' : 'success';
         $this->finalize($status);
     }
 
     private function processMatch(string $matchId): void
     {
         try {
-            $scorecardSynced = $this->syncScorecard($matchId);
-            if ($scorecardSynced) {
-                $this->scorecardsSynced++;
+            $squadsSynced = $this->syncSquads($matchId);
+            if ($squadsSynced) {
+                $this->squadsSynced++;
             } else {
-                $this->scorecardsSkipped++;
+                $this->squadsSkipped++;
             }
         } catch (Throwable $e) {
-            $this->scorecardsFailed++;
-            $this->log('scorecard_sync_failed', 'error', 'Failed to sync scorecard', $this->exceptionContext($e, [
+            $this->squadsFailed++;
+            $this->log('squads_sync_failed', 'error', 'Failed to sync squads', $this->exceptionContext($e, [
                 'match_id' => $matchId,
             ]));
         }
-
     }
 
-    private function syncScorecard(string $matchId): bool
+    private function syncSquads(string $matchId): bool
     {
         $docRef = $this->firestore
-            ->collection($this->scorecardsCollection)
+            ->collection($this->squadsCollection)
             ->document($matchId);
 
-        $shouldRefresh = true;
         $snapshot = null;
+        $shouldRefresh = true;
 
         try {
             $snapshot = $docRef->snapshot();
             if ($snapshot->exists()) {
-                $existingData = $snapshot->data();
-                $lastFetched  = (int) ($existingData['lastFetched'] ?? 0);
-                $ageMs        = now()->valueOf() - $lastFetched;
+                $existing    = $snapshot->data();
+                $lastFetched = (int) ($existing['lastFetched'] ?? 0);
+                $hasPlayers  = !empty(data_get($existing, 'squads.team1.players'))
+                    && !empty(data_get($existing, 'squads.team2.players'));
 
-                if ($lastFetched > 0 && $ageMs < self::SCORECARD_STALE_AFTER_MS) {
-                    $shouldRefresh = false;
+                if ($hasPlayers) {
+                    $ageMs = now()->valueOf() - $lastFetched;
+                    if ($lastFetched > 0 && $ageMs < self::SQUAD_STALE_AFTER_MS) {
+                        $shouldRefresh = false;
+                    }
                 }
             }
         } catch (Throwable $e) {
-            $this->log('scorecard_snapshot_failed', 'warning', 'Failed to read existing scorecard snapshot', $this->exceptionContext($e, [
+            $this->log('squads_snapshot_failed', 'warning', 'Failed to read existing squad snapshot', $this->exceptionContext($e, [
                 'match_id' => $matchId,
             ]));
         }
 
         if (!$shouldRefresh) {
-            $this->log('scorecard_cached', 'info', 'Scorecard considered fresh; skipping fetch', [
+            $this->log('squads_cached', 'info', 'Squads considered fresh; skipping fetch', [
                 'match_id' => $matchId,
             ]);
             return false;
         }
 
-        $url = $this->baseUrl . $matchId . '/scard';
-        $response = $this->performApiRequest($url, 'scorecard');
+        $url = $this->baseUrl . $matchId . '/teams';
+        $response = $this->performApiRequest($url, 'squads');
 
         if ($response === null) {
-            throw new \RuntimeException('No response received from scorecard API');
+            throw new \RuntimeException('No response received from squads API');
         }
 
         if (!$response->successful()) {
-            $this->log('scorecard_fetch_error', 'error', 'Scorecard API returned an error response', $this->responseContext($response, [
+            $this->log('squads_fetch_error', 'error', 'Squads API returned an error response', $this->responseContext($response, [
                 'match_id' => $matchId,
                 'url'      => $url,
             ]));
-            throw new \RuntimeException('Scorecard API returned error code ' . $response->status());
+            throw new \RuntimeException('Squads API returned error code ' . $response->status());
         }
 
         $payload = $response->json();
         if (!is_array($payload) || empty($payload)) {
-            $this->log('scorecard_fetch_invalid', 'warning', 'Scorecard API returned empty payload', [
+            $this->log('squads_fetch_invalid', 'warning', 'Squads API returned empty payload', [
                 'match_id' => $matchId,
                 'url'      => $url,
             ]);
             return false;
         }
 
-        $docRef->set($payload, ['merge' => true]);
+        $documentPayload = array_merge($payload, [
+            'lastFetched' => now()->valueOf(),
+            'serverTime'  => now()->toIso8601String(),
+        ]);
 
-        $this->log('scorecard_synced', 'success', 'Stored scorecard in Firestore', [
+        $docRef->set($documentPayload, ['merge' => true]);
+
+        $this->log('squads_synced', 'success', 'Stored squads in Firestore', [
             'match_id' => $matchId,
         ]);
 
@@ -273,29 +268,25 @@ class SyncScorecardJob implements ShouldQueue
     private function resolveMatchIds(): array
     {
         if (!empty($this->matchIds)) {
-            $resolved = array_values(array_unique(array_map(static fn($id) => (string) $id, $this->matchIds)));
-            $this->log('match_ids_provided', 'info', 'Using provided match IDs for scorecard sync', [
-                'match_count' => count($resolved),
-                'match_ids'   => $resolved,
-            ]);
-
-            return $resolved;
+            return $this->filterMatchIdsByState(
+                array_values(array_unique(array_map(static fn($id) => (string) $id, $this->matchIds)))
+            );
         }
 
         if (!$this->firestore) {
             return [];
         }
 
-        $this->log('match_ids_discovery', 'info', 'Discovering live match IDs from Firestore');
+        $this->log('match_ids_discovery', 'info', 'Discovering upcoming match IDs from Firestore');
 
         try {
             $query = $this->firestore
                 ->collection($this->matchesCollection)
-                ->where('matchInfo.state_lowercase', 'in', array_slice($this->liveStates, 0, 10));
+                ->where('matchInfo.state_lowercase', 'in', self::ALLOWED_STATES);
 
             $documents = $query->documents();
         } catch (Throwable $e) {
-            $this->log('match_id_query_failed', 'error', 'Failed to query live matches from Firestore', $this->exceptionContext($e));
+            $this->log('match_id_query_failed', 'error', 'Failed to query upcoming matches from Firestore', $this->exceptionContext($e));
             return [];
         }
 
@@ -308,25 +299,66 @@ class SyncScorecardJob implements ShouldQueue
             $ids[] = (string) $snapshot->id();
         }
 
-        $resolved = array_values(array_unique($ids));
+        return array_values(array_unique($ids));
+    }
 
-        $this->log('match_ids_discovered', 'info', 'Discovered match IDs from Firestore', [
-            'match_ids'   => $resolved,
-            'match_count' => count($resolved),
-        ]);
+    /**
+     * @param array<int, string> $matchIds
+     * @return array<int, string>
+     */
+    private function filterMatchIdsByState(array $matchIds): array
+    {
+        if (!$this->firestore || empty($matchIds)) {
+            return [];
+        }
 
-        return $resolved;
+        $allowed = [];
+
+        foreach ($matchIds as $matchId) {
+            try {
+                /** @var DocumentSnapshot $snapshot */
+                $snapshot = $this->firestore
+                    ->collection($this->matchesCollection)
+                    ->document($matchId)
+                    ->snapshot();
+            } catch (Throwable $e) {
+                $this->log('match_state_lookup_failed', 'warning', 'Failed to fetch match document while filtering by state', $this->exceptionContext($e, [
+                    'match_id' => $matchId,
+                ]));
+                continue;
+            }
+
+            if (!$snapshot->exists()) {
+                $this->log('match_missing', 'warning', 'Match document not found while filtering by state', [
+                    'match_id' => $matchId,
+                ]);
+                continue;
+            }
+
+            $state = strtolower((string) data_get($snapshot->data(), 'matchInfo.state_lowercase', ''));
+
+            if (in_array($state, self::ALLOWED_STATES, true)) {
+                $allowed[] = $matchId;
+            } else {
+                $this->log('match_skipped_state', 'info', 'Skipping match for squad sync due to state filter', [
+                    'match_id' => $matchId,
+                    'state'    => $state,
+                ]);
+            }
+        }
+
+        return $allowed;
     }
 
     private function finalize(string $status): void
     {
         $apiSummary = $this->getApiCallBreakdown();
 
-        $this->log('job_completed', $status, 'SyncScorecard job finished', [
+        $this->log('job_completed', $status, 'SyncSquad job finished', [
             'matches_considered' => count($this->targetMatchIds),
-            'scorecards_synced'  => $this->scorecardsSynced,
-            'scorecards_skipped' => $this->scorecardsSkipped,
-            'scorecards_failed'  => $this->scorecardsFailed,
+            'squads_synced'      => $this->squadsSynced,
+            'squads_skipped'     => $this->squadsSkipped,
+            'squads_failed'      => $this->squadsFailed,
             'requested_ids'      => $this->matchIds,
             'api_calls'          => $apiSummary,
         ]);

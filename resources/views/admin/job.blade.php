@@ -166,7 +166,7 @@
                             @endforeach
                         </select>
                     </div>
-                    <button type="submit" class="pill" style="background: rgba(129, 140, 248, 0.25); color: var(--text-primary); border: 1px solid rgba(129, 140, 248, 0.35); cursor: pointer;">Apply</button>
+                    <button type="submit" class="btn btn-primary">Apply</button>
                 </form>
             </div>
         </div>
@@ -181,8 +181,8 @@
                 <div class="input-group">
                     <input type="search" name="run" value="{{ $search }}" placeholder="Filter by run id" aria-label="Filter by run id">
                 </div>
-                <button type="submit" class="pill" style="background: rgba(15, 118, 110, 0.35); color: var(--text-primary); border: 1px solid rgba(20, 184, 166, 0.35); cursor: pointer;">Search</button>
-                <a href="{{ route('admin.jobs.show', [$job['key']]) }}" class="pill" style="background: transparent; border: 1px solid var(--divider);">Reset</a>
+                <button type="submit" class="btn btn-secondary">Search</button>
+                <a href="{{ route('admin.jobs.show', [$job['key']]) }}" class="btn btn-secondary">Reset</a>
             </div>
         </form>
 

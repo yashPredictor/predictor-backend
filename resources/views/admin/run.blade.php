@@ -32,7 +32,7 @@
                 <button type="button" class="copy-button" data-copy-text="{{ $run['run_id'] }}" aria-label="Copy run id {{ $run['run_id'] }}">Copy</button>
             </div>
             <div class="toolbar" style="gap: 12px;">
-                <a class="pill" href="{{ route('admin.jobs.show', [$job['key']]) }}">Back to job runs</a>
+                <a class="btn btn-secondary" href="{{ route('admin.jobs.show', [$job['key']]) }}">Back to job runs</a>
                 <span class="{{ $statusClassMap[$run['final_status']] ?? 'status-pill muted' }}">{{ strtoupper($run['final_status']) }}</span>
             </div>
         </div>

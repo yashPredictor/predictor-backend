@@ -2,15 +2,15 @@
 
 namespace App\Console\Commands;
 
-use App\Jobs\SyncScorecardJob;
+use App\Jobs\SyncSquadJob;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
-class SyncScorecards extends Command
+class SyncSquads extends Command
 {
-    protected $signature = 'app:scorecards-sync {--matchId=* : Sync scorecards for specific match IDs only.}';
-    protected $description = 'Dispatches a queue job to refresh scorecards for live matches.';
+    protected $signature = 'app:squads-sync {--matchId=* : Sync squads for specific match IDs only.}';
+    protected $description = 'Dispatches a queue job to refresh squads for upcoming matches.';
 
     /**
      * Normalise the option input into a flat, unique list of match IDs.
@@ -54,17 +54,17 @@ class SyncScorecards extends Command
         $matchIds = $this->normalizeOptionValues('matchId');
         $runId    = (string) Str::uuid();
 
-        SyncScorecardJob::dispatch($matchIds, $runId);
+        SyncSquadJob::dispatch($matchIds, $runId);
 
         if (empty($matchIds)) {
-            $message = 'Scorecard sync job queued for all live matches.';
+            $message = 'Squad sync job queued for all upcoming matches.';
         } else {
-            $message = 'Scorecard sync job queued for match IDs: ' . implode(', ', $matchIds) . '.';
+            $message = 'Squad sync job queued for match IDs: ' . implode(', ', $matchIds) . '.';
         }
 
         $this->info($message . " Run ID: {$runId}");
 
-        Log::info('SYNC-SCORECARD: ' . $message, [
+        Log::info('SYNC-SQUAD: ' . $message, [
             'run_id'    => $runId,
             'match_ids' => $matchIds,
         ]);

@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Services\AdminSettingsService;
 use App\Services\SeriesSyncLogger;
 use App\Support\Logging\ApiLogging;
 use App\Support\Queue\Middleware\RespectPauseWindow;
@@ -19,12 +20,18 @@ class SyncSeriesDataJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels, ApiLogging;
 
-    private const API_BASE_URL_SERIES = 'https://cricbuzz-cricket2.p.rapidapi.com/series/v1/';
+    private const SERIES_ENDPOINT     = 'series/v1/';
+    private const MATCH_CENTER_PATH   = 'mcenter/v1/';
+    private const MATCHES_COLLECTION  = 'matches';
 
     private ?FirestoreClient $firestore = null;
     private ?string $apiKey = null;
     private string $apiHost;
     private SeriesSyncLogger $logger;
+    private array $firestoreSettings = [];
+    private array $cricbuzzSettings  = [];
+    private string $seriesBaseUrl;
+    private string $matchCenterBaseUrl;
 
     private int $seriesStored = 0;
     private int $seriesFailed = 0;
@@ -62,6 +69,14 @@ class SyncSeriesDataJob implements ShouldQueue
             'seriesIds' => $this->seriesIds,
             'matchIds'  => $this->matchIds,
         ]);
+
+        $settingsService         = app(AdminSettingsService::class);
+        $this->firestoreSettings = $settingsService->firestoreSettings();
+        $this->cricbuzzSettings  = $settingsService->cricbuzzSettings();
+
+        $this->apiHost            = $this->cricbuzzSettings['host'] ?? $this->apiHost;
+        $this->seriesBaseUrl      = sprintf('https://%s/%s', $this->apiHost, self::SERIES_ENDPOINT);
+        $this->matchCenterBaseUrl = sprintf('https://%s/%s', $this->apiHost, self::MATCH_CENTER_PATH);
 
         try {
             $this->firestore = $this->initializeClients();
@@ -113,8 +128,8 @@ class SyncSeriesDataJob implements ShouldQueue
 
     private function initializeClients(): FirestoreClient
     {
-        $keyPath   = config('services.firestore.sa_json');
-        $projectId = config('services.firestore.project_id');
+        $keyPath   = $this->firestoreSettings['sa_json'] ?? config('services.firestore.sa_json');
+        $projectId = $this->firestoreSettings['project_id'] ?? config('services.firestore.project_id');
 
         if (!$projectId && $keyPath && is_file($keyPath)) {
             $json      = json_decode(file_get_contents($keyPath), true);
@@ -132,7 +147,8 @@ class SyncSeriesDataJob implements ShouldQueue
             $options['keyFilePath'] = $keyPath;
         }
 
-        $this->apiKey = config('services.cricbuzz.key');
+        $this->apiKey = $this->cricbuzzSettings['key'] ?? config('services.cricbuzz.key');
+
         if (!$this->apiKey) {
             throw new \RuntimeException('Cricbuzz API key is not configured.');
         }
@@ -150,7 +166,7 @@ class SyncSeriesDataJob implements ShouldQueue
         $resolved = $seriesIds;
         foreach ($matchIds as $matchId) {
             try {
-                $matchSnapshot = $this->firestore->collection('matches')->document((string) $matchId)->snapshot();
+                $matchSnapshot = $this->firestore->collection(self::MATCHES_COLLECTION)->document((string) $matchId)->snapshot();
             } catch (Throwable $e) {
                 $this->recordFailure('series_lookup', "Failed to fetch match {$matchId} from Firestore", [
                     'match_id' => $matchId,
@@ -196,7 +212,7 @@ class SyncSeriesDataJob implements ShouldQueue
         ]);
 
         foreach ($seriesTypes as $type) {
-            $response = $this->makeApiRequest(self::API_BASE_URL_SERIES . $type, 'series_type');
+            $response = $this->makeApiRequest($this->seriesBaseUrl . $type, 'series_type');
             if ($response === null) {
                 continue;
             }
@@ -205,7 +221,7 @@ class SyncSeriesDataJob implements ShouldQueue
             if (!$response->successful() || !isset($json['seriesMapProto'])) {
                 $this->recordFailure('series_fetch', "Invalid response for series type {$type}", $this->responseContext($response, [
                     'series_type' => $type,
-                    'url'         => self::API_BASE_URL_SERIES . $type,
+                    'url'         => $this->seriesBaseUrl . $type,
                 ]), null, 'warning');
                 continue;
             }
@@ -349,7 +365,7 @@ class SyncSeriesDataJob implements ShouldQueue
                 $seriesFilterSet[$seriesId] = true;
             }
 
-            $response = $this->makeApiRequest(self::API_BASE_URL_SERIES . $seriesId, 'series_matches');
+            $response = $this->makeApiRequest($this->seriesBaseUrl . $seriesId, 'series_matches');
             if ($response === null) {
                 continue;
             }
@@ -369,12 +385,14 @@ class SyncSeriesDataJob implements ShouldQueue
                 }
 
                 foreach ($detail['matchDetailsMap']['match'] as $match) {
-                    $matchInfo = Arr::get($match, 'matchInfo');
+                    $matchInfo         = Arr::get($match, 'matchInfo');
+                    $originalMatchInfo = is_array($matchInfo) ? $matchInfo : [];
+
                     if (!is_array($matchInfo)) {
                         continue;
                     }
 
-                    $matchId = (string) ($matchInfo['matchId'] ?? '');
+                    $matchId = $matchInfo['matchId'] ?? '';
                     if ($matchId === '') {
                         $this->recordFailure('match_store', 'Encountered match without ID', [
                             'series_id'     => $seriesId,
@@ -398,20 +416,32 @@ class SyncSeriesDataJob implements ShouldQueue
                         $matchFilterSet[$matchId] = true;
                     }
 
+                    $matchCenter = $this->fetchMatchCenterInfo($matchId);
+                    if (is_array($matchCenter) && !empty($matchCenter)) {
+                        $this->logger->log('match_center_enriched', 'info', "Enriched match {$matchId} with mcenter payload", [
+                            'series_id' => $seriesId,
+                            'category'  => $category,
+                        ]);
+                        $matchInfo = $matchCenter;
+                    } else {
+                        $this->logger->log('match_center_fallback', 'info', "Using original matchInfo for match {$matchId}", [
+                            'series_id' => $seriesId,
+                            'category'  => $category,
+                        ]);
+                    }
+
+                    $state     = $this->resolveMatchState($matchInfo, $originalMatchInfo);
+                    $startDate = $this->resolveMatchTimestamp($matchInfo, $originalMatchInfo, 'start');
+                    $endDate   = $this->resolveMatchTimestamp($matchInfo, $originalMatchInfo, 'end') ?? $startDate;
+
                     try {
                         $matchWithMeta = array_merge($match, [
                             'category'  => $category,
                             'seriesId'  => (int) $seriesId,
                             'matchInfo' => array_merge($matchInfo, [
-                                'state_lowercase' => isset($matchInfo['state'])
-                                    ? strtolower((string) $matchInfo['state'])
-                                    : null,
-                                'startDate'       => isset($matchInfo['startDate'])
-                                    ? (int) $matchInfo['startDate']
-                                    : null,
-                                'endDate'         => isset($matchInfo['endDate'])
-                                    ? (int) $matchInfo['endDate']
-                                    : (isset($matchInfo['startDate']) ? (int) $matchInfo['startDate'] : null),
+                                'state_lowercase' => $state !== null ? strtolower($state) : null,
+                                'startDate'       => $startDate,
+                                'endDate'         => $endDate,
                             ]),
                             'updatedAt' => now()->getTimestamp() * 1000,
                         ]);
@@ -460,6 +490,96 @@ class SyncSeriesDataJob implements ShouldQueue
         }
 
         return $this->matchesStored;
+    }
+
+    private function fetchMatchCenterInfo(string $matchId): ?array
+    {
+        $url = $this->matchCenterBaseUrl . $matchId;
+        $response = $this->makeApiRequest($url, 'match_center');
+
+        if ($response === null) {
+            return null;
+        }
+
+        $payload = $response->json();
+        if (!is_array($payload) || empty($payload)) {
+            $this->logger->log('match_center_invalid', 'warning', 'Match center API returned empty payload', [
+                'match_id' => $matchId,
+                'url'      => $url,
+            ]);
+            return null;
+        }
+
+        return $payload;
+    }
+
+    private function resolveMatchState(array $primary, array $fallback = []): ?string
+    {
+        $candidates = [
+            Arr::get($primary, 'state'),
+            Arr::get($primary, 'status'),
+            Arr::get($primary, 'matchHeader.state'),
+            Arr::get($primary, 'matchInfo.state'),
+            Arr::get($fallback, 'state'),
+            Arr::get($fallback, 'matchHeader.state'),
+            Arr::get($fallback, 'matchInfo.state'),
+        ];
+
+        foreach ($candidates as $candidate) {
+            if (is_string($candidate) && $candidate !== '') {
+                return $candidate;
+            }
+        }
+
+        return null;
+    }
+
+    private function resolveMatchTimestamp(array $primary, array $fallback, string $type): ?int
+    {
+        $keys = $type === 'start'
+            ? ['startDate', 'matchHeader.matchStartTimestamp', 'matchInfo.startDate', 'scheduleInfo.matchStartTimestamp']
+            : ['endDate', 'matchHeader.matchEndTimestamp', 'matchInfo.endDate', 'scheduleInfo.matchEndTimestamp'];
+
+        $candidates = [];
+        foreach ($keys as $key) {
+            $candidates[] = Arr::get($primary, $key);
+        }
+        foreach ($keys as $key) {
+            $candidates[] = Arr::get($fallback, $key);
+        }
+
+        foreach ($candidates as $value) {
+            $normalized = $this->normalizeTimestamp($value);
+            if ($normalized !== null) {
+                return $normalized;
+            }
+        }
+
+        return null;
+    }
+
+    private function normalizeTimestamp($value): ?int
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        if ($value instanceof \DateTimeInterface) {
+            return (int) ($value->getTimestamp() * 1000);
+        }
+
+        if (is_numeric($value)) {
+            return (int) $value;
+        }
+
+        if (is_string($value)) {
+            $trimmed = trim($value);
+            if ($trimmed !== '' && is_numeric($trimmed)) {
+                return (int) $trimmed;
+            }
+        }
+
+        return null;
     }
 
     private function makeApiRequest(string $url, string $action)

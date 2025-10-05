@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Services\AdminSettingsService;
 use App\Services\LiveMatchSyncLogger;
 use App\Support\Logging\ApiLogging;
 use App\Support\Queue\Middleware\RespectPauseWindow;
@@ -25,6 +26,8 @@ class SyncLiveMatchesJob implements ShouldQueue
     private ?string $apiKey    = null;
     private string $apiHost;
     private LiveMatchSyncLogger $logger;
+    private array $firestoreSettings = [];
+    private array $cricbuzzSettings  = [];
 
     /**
      * @param string[] $matchIds
@@ -53,6 +56,12 @@ class SyncLiveMatchesJob implements ShouldQueue
             'timeout'  => $this->timeout,
             'tries'    => $this->tries,
         ]);
+
+        $settingsService         = app(AdminSettingsService::class);
+        $this->firestoreSettings = $settingsService->firestoreSettings();
+        $this->cricbuzzSettings  = $settingsService->cricbuzzSettings();
+
+        $this->apiHost = $this->cricbuzzSettings['host'] ?? $this->apiHost;
 
         try {
             $this->firestore = $this->initializeClients();
@@ -196,8 +205,8 @@ class SyncLiveMatchesJob implements ShouldQueue
 
     private function initializeClients(): FirestoreClient
     {
-        $keyPath   = config('services.firestore.sa_json');
-        $projectId = config('services.firestore.project_id');
+        $keyPath   = $this->firestoreSettings['sa_json'] ?? config('services.firestore.sa_json');
+        $projectId = $this->firestoreSettings['project_id'] ?? config('services.firestore.project_id');
 
         if (!$projectId && $keyPath && is_file($keyPath)) {
             $json      = json_decode(file_get_contents($keyPath), true);
@@ -215,7 +224,7 @@ class SyncLiveMatchesJob implements ShouldQueue
             $options['keyFilePath'] = $keyPath;
         }
 
-        $this->apiKey = config('services.cricbuzz.key');
+        $this->apiKey = $this->cricbuzzSettings['key'] ?? config('services.cricbuzz.key');
         if (!$this->apiKey) {
             throw new \RuntimeException('Cricbuzz API key is not configured.');
         }

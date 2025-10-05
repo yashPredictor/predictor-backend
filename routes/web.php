@@ -2,7 +2,9 @@
 
 use App\Http\Controllers\Admin\AuthController;
 use App\Http\Controllers\Admin\CronDashboardController;
+use App\Http\Controllers\Admin\MaintenanceController;
 use App\Http\Controllers\Admin\PauseWindowController;
+use App\Http\Controllers\Admin\SettingsController;
 use Google\Cloud\Core\Timestamp as GoogleTimestamp;
 use Google\Cloud\Firestore\FieldValue;
 use Google\Cloud\Firestore\FirestoreClient;
@@ -19,6 +21,12 @@ Route::prefix('/')->name('admin.')->group(function () {
         Route::get('/', [CronDashboardController::class, 'index'])->name('dashboard');
         Route::get('/jobs/{job}', [CronDashboardController::class, 'job'])->name('jobs.show');
         Route::get('/jobs/{job}/runs/{runId}', [CronDashboardController::class, 'run'])->name('jobs.runs.show');
+        Route::get('/settings', [SettingsController::class, 'edit'])->name('settings.edit');
+        Route::put('/settings/firestore', [SettingsController::class, 'updateFirestore'])->name('settings.firestore');
+        Route::put('/settings/cricbuzz', [SettingsController::class, 'updateCricbuzz'])->name('settings.cricbuzz');
+        Route::get('/maintenance', [MaintenanceController::class, 'edit'])->name('maintenance.edit');
+        Route::put('/maintenance/log-retention', [MaintenanceController::class, 'updateLogRetention'])->name('maintenance.log-retention');
+        Route::post('/maintenance/truncate', [MaintenanceController::class, 'truncateTable'])->name('maintenance.truncate');
         Route::get('/pause-window', [PauseWindowController::class, 'edit'])->name('pause-window.edit');
         Route::put('/pause-window', [PauseWindowController::class, 'update'])->name('pause-window.update');
         Route::post('/logout', [AuthController::class, 'logout'])->name('logout');

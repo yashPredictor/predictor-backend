@@ -7,6 +7,7 @@ use App\Models\LiveMatchSyncLog;
 use App\Models\MatchOversSyncLog;
 use App\Models\SeriesSyncLog;
 use App\Models\ScorecardSyncLog;
+use App\Models\SquadSyncLog;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -38,9 +39,15 @@ class CronDashboardController extends Controller
         ],
         'scorecards' => [
             'label'       => 'Scorecard Sync',
-            'description' => 'Refreshes detailed scorecards and squad lists for live matches.',
+            'description' => 'Refreshes detailed scorecards for live matches.',
             'accent'      => 'cyan',
             'model'       => ScorecardSyncLog::class,
+        ],
+        'squads' => [
+            'label'       => 'Squad Sync',
+            'description' => 'Preloads squad lists ahead of upcoming matches.',
+            'accent'      => 'amber',
+            'model'       => SquadSyncLog::class,
         ],
     ];
 
@@ -193,6 +200,20 @@ class CronDashboardController extends Controller
                     && $currentJob === $key,
             ];
         }
+
+        $items[] = [
+            'key'    => 'maintenance',
+            'label'  => 'Jobs Maintenance',
+            'href'   => route('admin.maintenance.edit'),
+            'active' => str_starts_with($routeName, 'admin.maintenance.'),
+        ];
+
+        $items[] = [
+            'key'    => 'settings',
+            'label'  => 'Integration Settings',
+            'href'   => route('admin.settings.edit'),
+            'active' => str_starts_with($routeName, 'admin.settings.'),
+        ];
 
         $items[] = [
             'key'    => 'pause-window',

@@ -162,14 +162,85 @@
             margin: 0;
         }
 
-        .logout-button {
-            border: 1px solid rgba(148, 163, 184, 0.25);
-            background: rgba(15, 118, 110, 0.25);
-            color: var(--text-primary);
-            border-radius: 999px;
-            padding: 8px 16px;
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            border-radius: 14px;
+            padding: 10px 18px;
             font-size: 0.85rem;
+            font-weight: 600;
+            letter-spacing: 0.01em;
             cursor: pointer;
+            border: 1px solid transparent;
+            color: var(--text-primary);
+            background: rgba(148, 163, 184, 0.16);
+            transition: transform 0.18s ease, box-shadow 0.18s ease, border 0.18s ease, background 0.18s ease;
+            text-decoration: none;
+        }
+
+        .btn:hover,
+        .btn:focus-visible {
+            transform: translateY(-1px);
+            box-shadow: 0 14px 28px rgba(15, 23, 42, 0.25);
+        }
+
+        .btn:focus-visible {
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.35);
+        }
+
+        .btn:disabled,
+        .btn[disabled] {
+            opacity: 0.6;
+            cursor: not-allowed;
+            box-shadow: none;
+            transform: none;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, rgba(129, 140, 248, 0.85), rgba(14, 165, 233, 0.75));
+            border-color: rgba(129, 140, 248, 0.55);
+            color: #f8fafc;
+        }
+
+        .btn-primary:hover,
+        .btn-primary:focus-visible {
+            border-color: rgba(129, 140, 248, 0.75);
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.8), rgba(56, 189, 248, 0.6));
+            border-color: rgba(16, 185, 129, 0.55);
+            color: #f8fafc;
+        }
+
+        .btn-success:hover,
+        .btn-success:focus-visible {
+            border-color: rgba(16, 185, 129, 0.7);
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, rgba(248, 113, 113, 0.85), rgba(244, 114, 182, 0.65));
+            border-color: rgba(248, 113, 113, 0.6);
+            color: #fff5f7;
+        }
+
+        .btn-danger:hover,
+        .btn-danger:focus-visible {
+            border-color: rgba(248, 113, 113, 0.75);
+        }
+
+        .btn-secondary {
+            background: rgba(15, 118, 110, 0.25);
+            border-color: rgba(20, 184, 166, 0.35);
+            color: var(--text-primary);
+        }
+
+        .btn-secondary:hover,
+        .btn-secondary:focus-visible {
+            border-color: rgba(20, 184, 166, 0.5);
         }
 
         .content {
@@ -367,20 +438,83 @@
         .input-group {
             display: flex;
             align-items: center;
-            background: rgba(15, 23, 42, 0.95);
+            background-color: rgba(15, 23, 42, 0.92);
             border-radius: 12px;
             border: 1px solid var(--panel-border);
-            padding: 2px 12px;
+            padding: 0;
+            overflow: hidden;
+            padding-left: 10px;
         }
 
         .input-group select,
         .input-group input {
-            background: transparent;
+            flex: 1 1 auto;
+            background-color: transparent;
             border: none;
             color: var(--text-primary);
-            font-size: 0.85rem;
-            padding: 8px 6px;
+            font-size: 0.9rem;
+            padding: 10px 12px;
             outline: none;
+        }
+
+        .input-group select {
+            padding-right: 42px;
+        }
+
+        .form-control input,
+        .form-control select,
+        .form-control textarea,
+        input[type="text"],
+        input[type="number"],
+        input[type="password"],
+        input[type="time"],
+        input[type="email"],
+        select,
+        textarea {
+            width: 100%;
+            background-color: rgba(15, 23, 42, 0.92);
+            border: 1px solid var(--panel-border);
+            border-radius: 12px;
+            padding: 10px 12px;
+            color: var(--text-primary);
+            font-size: 0.9rem;
+            transition: border 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .form-control input:focus,
+        .form-control select:focus,
+        .form-control textarea:focus,
+        input[type="text"]:focus,
+        input[type="number"]:focus,
+        input[type="password"]:focus,
+        input[type="time"]:focus,
+        input[type="email"]:focus,
+        select:focus,
+        textarea:focus {
+            border-color: rgba(129, 140, 248, 0.55);
+            box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.25);
+            outline: none;
+        }
+
+        .form-control input::placeholder,
+        input::placeholder,
+        textarea::placeholder {
+            color: rgba(148, 163, 184, 0.6);
+        }
+
+        select {
+            appearance: none;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            padding-right: 42px;
+            background-repeat: no-repeat;
+            background-position: calc(100% - 18px) 50%;
+            background-size: 12px 8px;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' fill='none'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%2394a3b8' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+        }
+
+        select:focus {
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' fill='none'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23818cf8' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
         }
 
         .input-group input::placeholder {
@@ -455,14 +589,6 @@
 
         .status-segment.info {
             background: rgba(96, 165, 250, 0.5);
-        }
-
-        .pill {
-            padding: 6px 12px;
-            border-radius: 999px;
-            background: rgba(148, 163, 184, 0.18);
-            font-size: 0.75rem;
-            color: var(--text-muted);
         }
 
         .stacked-section {
@@ -701,7 +827,7 @@
                 @auth
                     <form method="POST" action="{{ route('admin.logout') }}" class="logout-form">
                         @csrf
-                        <button type="submit" class="logout-button">Log out</button>
+                        <button type="submit" class="btn btn-secondary">Log out</button>
                     </form>
                 @endauth
             </header>

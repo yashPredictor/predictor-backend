@@ -41,7 +41,7 @@
                 @endforeach
             </select>
         </div>
-        <button type="submit" class="pill" style="background: rgba(129, 140, 248, 0.25); color: var(--text-primary); border: 1px solid rgba(129, 140, 248, 0.35); cursor: pointer;">Refresh</button>
+        <button type="submit" class="btn btn-primary">Refresh</button>
     </form>
 
     <div class="cards-grid">
@@ -203,7 +203,7 @@
         <section id="job-{{ $summary['key'] }}" class="stacked-section" style="gap: 16px;">
             <div class="section-title">
                 <span>{{ $summary['label'] }} · Recent runs</span>
-                <a class="pill" href="{{ route('admin.jobs.show', $summary['key']) }}">Open job view</a>
+                <a class="btn btn-secondary" href="{{ route('admin.jobs.show', $summary['key']) }}">Open job view</a>
             </div>
             <p class="section-subtitle">{{ $summary['description'] }}</p>
             @if($summary['recent_runs']->isEmpty())

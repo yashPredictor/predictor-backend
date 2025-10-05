@@ -61,7 +61,7 @@
                 <span class="stat-label">Window enabled</span>
                 <label style="display: flex; align-items: center; gap: 10px;">
                     <input type="hidden" name="enabled" value="0">
-                    <input type="checkbox" name="enabled" value="1" @checked(old('enabled', $record->enabled ?? $settings->enabled))>
+                    <input type="checkbox" name="enabled" value="1" @checked(old('enabled', $record->enabled ?? $settings->enabled)) style="width: 16px;">
                     <span>Pause jobs during this window</span>
                 </label>
             </label>
@@ -81,7 +81,7 @@
             </label>
             <label class="form-control" style="display: flex; flex-direction: column; gap: 8px;">
                 <span class="stat-label">Timezone</span>
-                <select name="timezone" required>
+                <select name="timezone" required style="padding: 12px !important;">
                     @foreach($timezones as $tz)
                         <option value="{{ $tz }}" @selected(old('timezone', $settings->timezone) === $tz)>{{ $tz }}</option>
                     @endforeach
@@ -96,7 +96,7 @@
             and resume them at 6:00 the following morning.
         </p>
         <div style="display: flex; gap: 12px; justify-content: flex-end;">
-            <button type="submit" class="pill" style="background: rgba(129, 140, 248, 0.25); border: 1px solid rgba(129, 140, 248, 0.4); cursor: pointer;">
+            <button type="submit" class="btn btn-primary">
                 Save changes
             </button>
         </div>

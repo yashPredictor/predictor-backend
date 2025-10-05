@@ -22,6 +22,30 @@
         'rose' => 'rgba(244, 114, 182, 0.6)',
         'cyan' => 'rgba(6, 182, 212, 0.6)',
     ];
+
+    $statusChartData = [
+        'labels' => ['Errors', 'Warnings', 'Success', 'Info'],
+        'data'   => [
+            (int) ($run['error_count'] ?? 0),
+            (int) ($run['warning_count'] ?? 0),
+            (int) ($run['success_count'] ?? 0),
+            (int) ($run['info_count'] ?? 0),
+        ],
+    ];
+
+    $apiBreakdown = collect($run['api_calls']['breakdown'] ?? [])
+        ->take(6)
+        ->map(function ($entry) {
+            return [
+                'label' => $entry['label'] ?? ($entry['path'] ?? 'Endpoint'),
+                'count' => (int) ($entry['count'] ?? 0),
+            ];
+        });
+
+    $apiChartData = [
+        'labels' => $apiBreakdown->pluck('label'),
+        'data'   => $apiBreakdown->pluck('count'),
+    ];
 @endphp
 
 <div class="stacked-section" style="gap: 28px;">
@@ -74,6 +98,18 @@
         @if($run['summary_message'])
             <div class="card-subtitle" style="margin-top: 18px;">Summary: {{ $run['summary_message'] }}</div>
         @endif
+
+        <div class="metrics-row" style="margin-top: 24px; flex-wrap: wrap;">
+            <div class="chart-card">
+                <div class="section-subtitle" style="margin: 0 0 12px;">Event distribution</div>
+                <canvas id="run-status-chart" height="220"></canvas>
+            </div>
+            <div class="chart-card">
+                <div class="section-subtitle" style="margin: 0 0 12px;">API calls breakdown</div>
+                <canvas id="run-api-chart" height="220"></canvas>
+            </div>
+        </div>
+
         @if(!empty($run['api_calls']['breakdown']))
             <div class="section-subtitle" style="margin-top: 18px;">API breakdown</div>
             <div style="display: flex; gap: 8px; flex-wrap: wrap;">
@@ -99,10 +135,10 @@
     <section class="card">
         <div class="section-title">
             <span>Timeline</span>
-            <span class="badge">{{ $logs->count() }} entries</span>
+            <span class="badge">{{ $logTotal }} entries</span>
         </div>
         <div class="timeline">
-            @foreach($logs as $log)
+            @forelse($logs as $log)
                 @php
                     $status = $log->status ?? 'info';
                     $pill = $statusClassMap[$status] ?? 'status-pill muted';
@@ -130,8 +166,114 @@
                         </details>
                     @endif
                 </article>
-            @endforeach
+            @empty
+                <div class="empty-state">No logs captured for this page.</div>
+            @endforelse
         </div>
+
+        @if($logs->hasPages())
+            <div class="toolbar" style="margin-top: 20px; justify-content: space-between;">
+                <span class="card-subtitle">Page {{ $logs->currentPage() }} of {{ $logs->lastPage() }}</span>
+                <div class="pagination">
+                    @if($logs->onFirstPage())
+                        <span>Prev</span>
+                    @else
+                        <a href="{{ $logs->previousPageUrl() }}">Prev</a>
+                    @endif
+
+                    @foreach($logs->getUrlRange(max(1, $logs->currentPage() - 2), min($logs->lastPage(), $logs->currentPage() + 2)) as $page => $url)
+                        @if($page == $logs->currentPage())
+                            <span class="active">{{ $page }}</span>
+                        @else
+                            <a href="{{ $url }}">{{ $page }}</a>
+                        @endif
+                    @endforeach
+
+                    @if($logs->hasMorePages())
+                        <a href="{{ $logs->nextPageUrl() }}">Next</a>
+                    @else
+                        <span>Next</span>
+                    @endif
+                </div>
+            </div>
+        @endif
     </section>
 </div>
 @endsection
+
+@push('scripts')
+    @once
+        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    @endonce
+    <script>
+        (function () {
+            const statusEl = document.getElementById('run-status-chart');
+            const apiEl = document.getElementById('run-api-chart');
+
+            const statusData = @json($statusChartData);
+            const apiData = @json($apiChartData);
+
+            if (statusEl && typeof Chart !== 'undefined') {
+                new Chart(statusEl, {
+                    type: 'doughnut',
+                    data: {
+                        labels: statusData.labels,
+                        datasets: [{
+                            data: statusData.data,
+                            backgroundColor: [
+                                'rgba(248, 113, 113, 0.7)',
+                                'rgba(234, 179, 8, 0.7)',
+                                'rgba(34, 197, 94, 0.7)',
+                                'rgba(148, 163, 184, 0.7)'
+                            ],
+                            borderColor: 'rgba(15, 23, 42, 0.85)',
+                            borderWidth: 2,
+                        }]
+                    },
+                    options: {
+                        plugins: {
+                            legend: {
+                                labels: {
+                                    color: '#cbd5f5'
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+
+            if (apiEl && typeof Chart !== 'undefined' && apiData.data.length) {
+                new Chart(apiEl, {
+                    type: 'bar',
+                    data: {
+                        labels: apiData.labels,
+                        datasets: [{
+                            label: 'Calls',
+                            data: apiData.data,
+                            backgroundColor: 'rgba(129, 140, 248, 0.6)',
+                            borderRadius: 6,
+                        }]
+                    },
+                    options: {
+                        scales: {
+                            x: {
+                                ticks: { color: '#cbd5f5' },
+                                grid: { color: 'rgba(148, 163, 184, 0.1)' }
+                            },
+                            y: {
+                                beginAtZero: true,
+                                ticks: { color: '#cbd5f5' },
+                                grid: { color: 'rgba(148, 163, 184, 0.1)' }
+                            }
+                        },
+                        plugins: {
+                            legend: {
+                                labels: { color: '#cbd5f5' }
+                            }
+                        }
+                    }
+                });
+            }
+        })();
+    </script>
+@endpush

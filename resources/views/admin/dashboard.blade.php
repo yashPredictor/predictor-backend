@@ -29,6 +29,14 @@
         })
         ->sortByDesc(fn ($item) => $item['log']->created_at)
         ->take(6);
+
+    $jobsForChart = collect($summaries)->values();
+    $jobsChartData = [
+        'labels'      => $jobsForChart->pluck('label')->values(),
+        'runsWindow'  => $jobsForChart->pluck('runs_last_window')->map(fn ($value) => (int) $value)->values(),
+        'runsTotal'   => $jobsForChart->pluck('total_runs')->map(fn ($value) => (int) $value)->values(),
+        'apiWindow'   => $jobsForChart->map(fn ($summary) => (int) ($summary['api_window_summary']['total'] ?? 0))->values(),
+    ];
 @endphp
 
 <div class="stacked-section" style="gap: 32px;">
@@ -164,6 +172,17 @@
         @endforeach
     </div>
 
+    <section class="card" style="padding: 24px;">
+        <div class="section-title">
+            <span>Job comparison</span>
+            <span class="badge">{{ $jobsForChart->count() }} jobs</span>
+        </div>
+        <p class="section-subtitle">Visualise recent activity, total runs, and API consumption for each job inside the selected window.</p>
+        <div style="position: relative; min-height: 320px;">
+            <canvas id="dashboard-jobs-chart" height="280"></canvas>
+        </div>
+    </section>
+
     @if($aggregateIssues->isNotEmpty())
         <section class="card">
             <div class="section-title">
@@ -248,6 +267,81 @@
                 </div>
             @endif
         </section>
-    @endforeach
+@endforeach
 </div>
 @endsection
+
+@push('scripts')
+    @once
+        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    @endonce
+    <script>
+        (function () {
+            const ctx = document.getElementById('dashboard-jobs-chart');
+            const chartData = @json($jobsChartData);
+
+            if (!ctx || typeof Chart === 'undefined' || !chartData.labels.length) {
+                return;
+            }
+
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: chartData.labels,
+                    datasets: [
+                        {
+                            label: 'Runs in window',
+                            data: chartData.runsWindow,
+                            backgroundColor: 'rgba(16, 185, 129, 0.65)',
+                            borderRadius: 8,
+                            order: 2,
+                        },
+                        {
+                            label: 'Total runs',
+                            data: chartData.runsTotal,
+                            backgroundColor: 'rgba(129, 140, 248, 0.45)',
+                            borderRadius: 8,
+                            order: 3,
+                        },
+                        {
+                            label: 'API calls (window)',
+                            data: chartData.apiWindow,
+                            type: 'line',
+                            borderColor: 'rgba(244, 114, 182, 0.9)',
+                            backgroundColor: 'rgba(244, 114, 182, 0.35)',
+                            tension: 0.2,
+                            yAxisID: 'y1',
+                            order: 1,
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            position: 'left',
+                            ticks: { color: '#cbd5f5' },
+                            grid: { color: 'rgba(148, 163, 184, 0.1)' }
+                        },
+                        y1: {
+                            beginAtZero: true,
+                            position: 'right',
+                            ticks: { color: '#fbcfe8' },
+                            grid: { drawOnChartArea: false }
+                        },
+                        x: {
+                            ticks: { color: '#cbd5f5' },
+                            grid: { color: 'rgba(148, 163, 184, 0.1)' }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            labels: { color: '#cbd5f5' }
+                        }
+                    }
+                }
+            });
+        })();
+    </script>
+@endpush

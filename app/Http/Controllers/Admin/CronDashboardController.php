@@ -155,14 +155,19 @@ class CronDashboardController extends Controller
         $jobConfig = $this->resolveJob($job);
         $modelClass = $jobConfig['model'];
 
-        $logs = $modelClass::query()
+        $logsQuery = $modelClass::query()
             ->where('run_id', $runId)
-            ->orderBy('created_at')
-            ->get();
+            ->orderBy('created_at');
 
-        abort_if($logs->isEmpty(), 404);
+        $allLogs = (clone $logsQuery)->get();
 
-        $summary = $this->mapRun($logs, $job);
+        abort_if($allLogs->isEmpty(), 404);
+
+        $summary = $this->mapRun($allLogs, $job);
+
+        $logs = $logsQuery
+            ->paginate(40)
+            ->withQueryString();
 
         return view('admin.run', [
             'pageTitle' => $jobConfig['label'] . ' · Run ' . $runId,
@@ -170,6 +175,7 @@ class CronDashboardController extends Controller
             'job'       => $jobConfig + ['key' => $job],
             'run'       => $summary,
             'logs'      => $logs,
+            'logTotal'  => $allLogs->count(),
         ]);
     }
 

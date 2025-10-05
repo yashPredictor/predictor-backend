@@ -303,6 +303,20 @@
             flex-wrap: wrap;
         }
 
+        .chart-card {
+            flex: 1 1 260px;
+            background: rgba(15, 23, 42, 0.8);
+            border: 1px solid var(--panel-border);
+            border-radius: 16px;
+            padding: 16px;
+            min-width: 240px;
+        }
+
+        .chart-card canvas {
+            width: 100%;
+            height: 220px;
+        }
+
         .metric {
             display: flex;
             flex-direction: column;

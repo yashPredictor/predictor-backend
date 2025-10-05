@@ -21,6 +21,22 @@
         'rose' => 'rgba(244, 114, 182, 0.6)',
         'cyan' => 'rgba(6, 182, 212, 0.6)',
     ];
+
+    $recentRunsForChart = $summary['recent_runs']->reverse()->values();
+    $runChartData = [
+        'labels'   => $recentRunsForChart->map(fn ($run) => \Illuminate\Support\Str::limit($run['run_id'] ?? 'run', 8))->values(),
+        'apiCalls' => $recentRunsForChart->map(fn ($run) => (int) ($run['api_calls']['total'] ?? $run['api_call_total'] ?? 0))->values(),
+        'durations'=> $recentRunsForChart->map(fn ($run) => round(((int) ($run['duration_seconds'] ?? 0)) / 60, 2))->values(),
+    ];
+
+    $statusChartData = [
+        'labels' => ['Errors', 'Warnings', 'Success'],
+        'data'   => [
+            (int) ($statusCounts['error'] ?? 0),
+            (int) ($statusCounts['warning'] ?? 0),
+            (int) ($statusCounts['success'] ?? 0),
+        ],
+    ];
 @endphp
 
 <div class="stacked-section" style="gap: 32px;">
@@ -148,6 +164,29 @@
                         <div class="card-subtitle">No endpoints recorded in this window.</div>
                     @endif
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="cards-grid" style="grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));">
+        <div class="card" style="padding: 24px;">
+            <div class="section-title">
+                <span>Recent run trends</span>
+                <span class="badge">Last {{ max(1, $recentRunsForChart->count()) }} runs</span>
+            </div>
+            <p class="section-subtitle">Track API calls and runtime duration across the latest executions.</p>
+            <div style="position: relative; min-height: 260px;">
+                <canvas id="job-run-trend-chart" height="240"></canvas>
+            </div>
+        </div>
+
+        <div class="card" style="padding: 24px;">
+            <div class="section-title">
+                <span>Status distribution (window)</span>
+            </div>
+            <p class="section-subtitle">Proportion of status events recorded inside the selected window.</p>
+            <div style="position: relative; min-height: 260px;">
+                <canvas id="job-status-chart" height="240"></canvas>
             </div>
         </div>
     </div>
@@ -296,3 +335,96 @@
     </section>
 </div>
 @endsection
+
+@push('scripts')
+    @once
+        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    @endonce
+    <script>
+        (function () {
+            const runCtx = document.getElementById('job-run-trend-chart');
+            const statusCtx = document.getElementById('job-status-chart');
+
+            const runData = @json($runChartData);
+            const statusData = @json($statusChartData);
+
+            if (runCtx && typeof Chart !== 'undefined' && runData.labels.length) {
+                new Chart(runCtx, {
+                    type: 'bar',
+                    data: {
+                        labels: runData.labels,
+                        datasets: [
+                            {
+                                label: 'API calls',
+                                data: runData.apiCalls,
+                                backgroundColor: 'rgba(129, 140, 248, 0.6)',
+                                borderRadius: 8,
+                                yAxisID: 'y',
+                            },
+                            {
+                                label: 'Duration (minutes)',
+                                data: runData.durations,
+                                borderColor: 'rgba(16, 185, 129, 0.9)',
+                                backgroundColor: 'rgba(16, 185, 129, 0.25)',
+                                type: 'line',
+                                tension: 0.25,
+                                yAxisID: 'y1',
+                            }
+                        ]
+                    },
+                    options: {
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                position: 'left',
+                                ticks: { color: '#cbd5f5' },
+                                grid: { color: 'rgba(148, 163, 184, 0.1)' }
+                            },
+                            y1: {
+                                beginAtZero: true,
+                                position: 'right',
+                                ticks: { color: '#a7f3d0' },
+                                grid: { drawOnChartArea: false }
+                            },
+                            x: {
+                                ticks: { color: '#cbd5f5' },
+                                grid: { color: 'rgba(148, 163, 184, 0.1)' }
+                            }
+                        },
+                        plugins: {
+                            legend: {
+                                labels: { color: '#cbd5f5' }
+                            }
+                        }
+                    }
+                });
+            }
+
+            if (statusCtx && typeof Chart !== 'undefined' && statusData.data.some(v => v > 0)) {
+                new Chart(statusCtx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: statusData.labels,
+                        datasets: [{
+                            data: statusData.data,
+                            backgroundColor: [
+                                'rgba(248, 113, 113, 0.7)',
+                                'rgba(234, 179, 8, 0.7)',
+                                'rgba(34, 197, 94, 0.7)'
+                            ],
+                            borderColor: 'rgba(15, 23, 42, 0.85)',
+                            borderWidth: 2,
+                        }]
+                    },
+                    options: {
+                        plugins: {
+                            legend: {
+                                labels: { color: '#cbd5f5' }
+                            }
+                        }
+                    }
+                });
+            }
+        })();
+    </script>
+@endpush

@@ -21,27 +21,39 @@ class SyncSeriesDataJob implements ShouldQueue
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels, ApiLogging;
 
     private const SERIES_ENDPOINT     = 'series/v1/';
+
     private const MATCH_CENTER_PATH   = 'mcenter/v1/';
+
     private const MATCHES_COLLECTION  = 'matches';
 
     private ?FirestoreClient $firestore = null;
+
     private ?string $apiKey = null;
+
     private string $apiHost;
+
     private SeriesSyncLogger $logger;
+
     private array $firestoreSettings = [];
+
     private array $cricbuzzSettings  = [];
+
     private string $seriesBaseUrl;
+
     private string $matchCenterBaseUrl;
 
     private int $seriesStored = 0;
+
     private int $seriesFailed = 0;
+
     private int $matchesStored = 0;
+
     private int $matchesFailed = 0;
 
     /** @var array<int, array<string, string>> */
     private array $failures = [];
 
-    public int $timeout = 600;
+    public int $timeout = 3600;
     
     public int $tries = 5;
 

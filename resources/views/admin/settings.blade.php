@@ -61,7 +61,7 @@
             </label>
             <label class="form-control" style="display: flex; flex-direction: column; gap: 8px;">
                 <span class="stat-label">API key</span>
-                <input type="password" name="key" value="{{ old('key') ?? ($cricbuzz['key'] ? $cricbuzz['key'] : '') }}" placeholder="Enter new API key" autocomplete="off">
+                <input type="text" name="key" value="Cricbuzz api key is not showing here...only you can update key from here.." placeholder="Enter new API key" autocomplete="off">
                 @error('key')
                     <span style="color: var(--error); font-size: 0.75rem;">{{ $message }}</span>
                 @enderror

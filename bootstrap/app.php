@@ -25,23 +25,38 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withSchedule(function (Schedule $schedule): void {
         $shouldRun = static fn(): bool => !app(PauseWindowService::class)->isPaused();
 
+        $schedule->job(new SyncLiveMatchesJob())
+            ->everyTwoMinutes()
+            ->withoutOverlapping()
+            ->when($shouldRun);
+
+        $schedule->job(new SyncMatchOversJob())
+            ->everyMinute()
+            ->withoutOverlapping()
+            ->when($shouldRun);
+
+        $schedule->job(new SyncSeriesDataJob())
+            ->cron('0 11 */3 * *') 
+            ->withoutOverlapping()
+            ->when($shouldRun);
+
         $schedule->job(new SyncScorecardJob())
-            ->cron('*/30 * * * * *')
+            ->everyThreeMinutes()
             ->withoutOverlapping()
             ->when($shouldRun);
 
-        $schedule->job(new SyncSquadJob())
-            ->dailyAt('06:00')
-            ->withoutOverlapping()
-            ->when($shouldRun);
-
+        // $schedule->job(new SyncSquadJob())
+        //     ->dailyAt('06:00')
+        //     ->withoutOverlapping()
+        //     ->when($shouldRun);
+    
         $schedule->job(new SyncSeriesSquadJob())
-            ->dailyAt('05:15')
+            ->dailyAt('11:00')
             ->withoutOverlapping()
             ->when($shouldRun);
 
         $schedule->job(new MoveEndedMatchesToRecentJob())
-            ->everyTenMinutes()
+            ->everyMinute()
             ->withoutOverlapping()
             ->when($shouldRun);
 
@@ -55,4 +70,4 @@ return Application::configure(basePath: dirname(__DIR__))
             'auth' => App\Http\Middleware\Authenticate::class,
         ]);
     })
-    ->withExceptions(function (Exceptions $exceptions): void {})->create();
+    ->withExceptions(function (Exceptions $exceptions): void { })->create();

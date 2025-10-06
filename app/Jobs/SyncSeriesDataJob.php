@@ -20,6 +20,7 @@ class SyncSeriesDataJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels, ApiLogging;
 
+    private const CRON_KEY = 'series';
     private const SERIES_ENDPOINT     = 'series/v1/';
 
     private const MATCH_CENTER_PATH   = 'mcenter/v1/';
@@ -83,6 +84,12 @@ class SyncSeriesDataJob implements ShouldQueue
         ]);
 
         $settingsService         = app(AdminSettingsService::class);
+
+        if (!$settingsService->isCronEnabled(self::CRON_KEY)) {
+            $this->logger->log('job_disabled', 'warning', 'Series sync job paused via emergency controls.');
+            return;
+        }
+
         $this->firestoreSettings = $settingsService->firestoreSettings();
         $this->cricbuzzSettings  = $settingsService->cricbuzzSettings();
 

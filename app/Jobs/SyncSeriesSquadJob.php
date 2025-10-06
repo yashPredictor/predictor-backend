@@ -21,6 +21,7 @@ class SyncSeriesSquadJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels, ApiLogging;
 
+    private const CRON_KEY = 'series-squads';
     private const SQUADS_COLLECTION = 'seriesSquads';
 
     public int $timeout = 600;
@@ -64,6 +65,12 @@ class SyncSeriesSquadJob implements ShouldQueue
         ]);
 
         $settingsService = app(AdminSettingsService::class);
+
+        if (!$settingsService->isCronEnabled(self::CRON_KEY)) {
+            $this->log('job_disabled', 'warning', 'Series squad sync job paused via emergency controls.');
+            return;
+        }
+
         $this->firestoreSettings = $settingsService->firestoreSettings();
         $this->cricbuzzSettings = $settingsService->cricbuzzSettings();
 

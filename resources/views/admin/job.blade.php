@@ -41,9 +41,22 @@
             (int) ($statusCounts['success'] ?? 0),
         ],
     ];
+    $disabled = $disabled ?? ($summary['disabled'] ?? false);
 @endphp
 
 <div class="stacked-section" style="gap: 32px;">
+    @if($disabled)
+        <section class="card" style="border-left: 4px solid rgba(234, 179, 8, 0.6); background: rgba(22, 45, 75, 0.7);">
+            <div class="section-title" style="margin-bottom: 8px;">
+                <span>Emergency pause active</span>
+                <span class="status-pill warning">PAUSED</span>
+            </div>
+            <p class="section-subtitle" style="margin: 0;">
+                This job is currently disabled via the emergency controls. Scheduled runs will be skipped until it is resumed.
+            </p>
+        </section>
+    @endif
+
     <div class="cards-grid" style="grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));">
         <div class="card" style="border-top: 3px solid {{ $accentPalette[$job['accent']] ?? 'rgba(148,163,184,0.35)' }};">
             <div class="card-title">Total runs tracked</div>

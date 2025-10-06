@@ -66,6 +66,12 @@ class SyncLiveMatchesJob implements ShouldQueue
         ]);
 
         $settingsService = app(AdminSettingsService::class);
+
+        if (!$settingsService->isCronEnabled(self::CRON_KEY)) {
+            $this->log('job_disabled', 'warning', 'Live matches job paused via emergency controls.');
+            return;
+        }
+
         $this->firestoreSettings = $settingsService->firestoreSettings();
         $this->cricbuzzSettings = $settingsService->cricbuzzSettings();
 

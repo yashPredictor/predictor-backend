@@ -20,6 +20,7 @@ class MoveEndedMatchesToRecentJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels, ApiLogging;
 
+    private const CRON_KEY = 'recent-matches';
     public int $timeout = 240;
     public int $tries = 5;
 
@@ -52,6 +53,12 @@ class MoveEndedMatchesToRecentJob implements ShouldQueue
         $this->log('job_started', 'info', 'MoveEndedMatchesToRecent job started', []);
 
         $settingsService = app(AdminSettingsService::class);
+
+        if (!$settingsService->isCronEnabled(self::CRON_KEY)) {
+            $this->log('job_disabled', 'warning', 'Recent matches job paused via emergency controls.');
+            return;
+        }
+
         $this->firestoreSettings = $settingsService->firestoreSettings();
 
         try {

@@ -23,6 +23,7 @@ class SyncSquadJob implements ShouldQueue
     private const SQUAD_STALE_AFTER_MS = 600_000;
 
     private const ALLOWED_STATES = ['preview', 'upcoming'];
+    private const CRON_KEY = 'squads';
     private const MATCHES_COLLECTION = 'matches';
     private const SQUADS_COLLECTION  = 'squads';
 
@@ -79,6 +80,12 @@ class SyncSquadJob implements ShouldQueue
         ]);
 
         $settingsService          = app(AdminSettingsService::class);
+
+        if (!$settingsService->isCronEnabled(self::CRON_KEY)) {
+            $this->log('job_disabled', 'warning', 'Squad sync job paused via emergency controls.');
+            return;
+        }
+
         $this->firestoreSettings  = $settingsService->firestoreSettings();
         $this->cricbuzzSettings   = $settingsService->cricbuzzSettings();
 

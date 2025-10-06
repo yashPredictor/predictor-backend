@@ -10,6 +10,7 @@ use App\Models\SeriesSyncLog;
 use App\Models\SeriesSquadSyncLog;
 use App\Models\ScorecardSyncLog;
 use App\Models\SquadSyncLog;
+use App\Services\AdminSettingsService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -94,6 +95,7 @@ class CronDashboardController extends Controller
         $window    = max(1, (int) $request->input('days', 7));
         $statusFilter = $this->validatedStatus($request->input('status'));
         $summary   = $this->buildSummary($job, $jobConfig, $window);
+        $settingsService = app(AdminSettingsService::class);
 
         $modelClass = $jobConfig['model'];
         $table      = (new $modelClass())->getTable();
@@ -167,6 +169,7 @@ class CronDashboardController extends Controller
             'search'    => $search,
             'days'      => $window,
             'statusFilter' => $statusFilter,
+            'disabled'     => !$settingsService->isCronEnabled($job),
         ]);
     }
 
@@ -177,6 +180,7 @@ class CronDashboardController extends Controller
 
         $statusFilter = $this->validatedStatus($request->input('status'));
         $search       = trim((string) $request->input('q', ''));
+        $settingsService = app(AdminSettingsService::class);
 
         $logsQuery = $modelClass::query()
             ->where('run_id', $runId)
@@ -208,6 +212,7 @@ class CronDashboardController extends Controller
             'logTotal'  => $allLogs->count(),
             'statusFilter' => $statusFilter,
             'searchTerm'   => $search,
+            'disabled'     => !$settingsService->isCronEnabled($job),
         ]);
     }
 
@@ -238,6 +243,13 @@ class CronDashboardController extends Controller
                     && $currentJob === $key,
             ];
         }
+
+        $items[] = [
+            'key'    => 'emergency',
+            'label'  => 'Emergency Controls',
+            'href'   => route('admin.emergency.index'),
+            'active' => str_starts_with($routeName, 'admin.emergency.'),
+        ];
 
         $items[] = [
             'key'    => 'maintenance',
@@ -340,6 +352,8 @@ class CronDashboardController extends Controller
 
         $apiWindowSummary = $this->aggregateApiSummary($windowCompletionLogs);
 
+        $settingsService = app(AdminSettingsService::class);
+
         return $config + [
             'key'              => $key,
             'total_runs'       => $totalRuns,
@@ -350,7 +364,13 @@ class CronDashboardController extends Controller
             'recent_issues'    => $recentIssues,
             'window_days'      => $days,
             'api_window_summary' => $apiWindowSummary,
+            'disabled'         => !$settingsService->isCronEnabled($key),
         ];
+    }
+
+    public static function jobs(): array
+    {
+        return self::JOBS;
     }
 
     protected function mapRun(Collection $logs, string $jobKey): array

@@ -11,6 +11,7 @@ class AdminSettingsService
     private const LOG_CLEANUP_KEY   = 'log_cleanup';
     private const CRICBUZZ_KEY      = 'integrations.cricbuzz';
     private const FIRESTORE_KEY     = 'integrations.firestore';
+    private const CRON_TOGGLES_KEY  = 'cron_toggles';
     private const MIN_RETENTION_DAYS = 5;
 
     public function __construct(private readonly CacheManager $cache)
@@ -103,6 +104,26 @@ class AdminSettingsService
         ];
 
         $this->put(self::FIRESTORE_KEY, $this->filterEmpty($payload));
+    }
+
+    public function cronToggles(): array
+    {
+        return $this->get(self::CRON_TOGGLES_KEY, []);
+    }
+
+    public function isCronEnabled(string $key): bool
+    {
+        $toggles = $this->cronToggles();
+
+        return !array_key_exists($key, $toggles) || (bool) $toggles[$key];
+    }
+
+    public function setCronEnabled(string $key, bool $enabled): void
+    {
+        $toggles = $this->cronToggles();
+        $toggles[$key] = $enabled;
+
+        $this->put(self::CRON_TOGGLES_KEY, $toggles);
     }
 
     private function sanitize(?string $value): ?string

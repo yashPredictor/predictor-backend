@@ -19,16 +19,17 @@ class SyncScorecardJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels, ApiLogging;
 
+    private const CRON_KEY = 'scorecards';
     private const SCORECARD_STALE_AFTER_MS = 60_000;
-    private const MATCHES_COLLECTION       = 'matches';
-    private const SCORECARDS_COLLECTION    = 'scorecard';
+    private const MATCHES_COLLECTION = 'matches';
+    private const SCORECARDS_COLLECTION = 'scorecard';
 
     public int $timeout = 600;
 
-    public int $tries   = 5;
+    public int $tries = 5;
 
     private ?FirestoreClient $firestore = null;
-    private ?string $apiKey             = null;
+    private ?string $apiKey = null;
     private string $apiHost;
     private string $baseUrl;
     private string $matchesCollection;
@@ -36,7 +37,7 @@ class SyncScorecardJob implements ShouldQueue
 
     private ScorecardSyncLogger $logger;
     private array $firestoreSettings = [];
-    private array $cricbuzzSettings  = [];
+    private array $cricbuzzSettings = [];
 
     /** @var string[] */
     private array $liveStates = [
@@ -56,16 +57,17 @@ class SyncScorecardJob implements ShouldQueue
     /** @var string[] */
     private array $targetMatchIds = [];
 
-    private int $scorecardsSynced  = 0;
+    private int $scorecardsSynced = 0;
 
     private int $scorecardsSkipped = 0;
 
-    private int $scorecardsFailed  = 0;
-    
+    private int $scorecardsFailed = 0;
+
     public function __construct(
         private readonly array $matchIds = [],
         private ?string $runId = null,
-    ) {}
+    ) {
+    }
 
     /**
      * @return string[]
@@ -77,27 +79,33 @@ class SyncScorecardJob implements ShouldQueue
 
     public function handle(): void
     {
-        $this->apiHost             = config('services.cricbuzz.host', 'cricbuzz-cricket2.p.rapidapi.com');
-        $this->baseUrl             = sprintf('https://%s/mcenter/v1/', $this->apiHost);
-        $this->matchesCollection   = self::MATCHES_COLLECTION;
+        $this->apiHost = config('services.cricbuzz.host', 'cricbuzz-cricket2.p.rapidapi.com');
+        $this->baseUrl = sprintf('https://%s/mcenter/v1/', $this->apiHost);
+        $this->matchesCollection = self::MATCHES_COLLECTION;
         $this->scorecardsCollection = self::SCORECARDS_COLLECTION;
 
         $this->logger = new ScorecardSyncLogger($this->runId);
-        $this->runId  = $this->logger->runId;
+        $this->runId = $this->logger->runId;
 
         $this->log('job_started', 'info', 'SyncScorecard job started', [
             'requested_match_ids' => $this->matchIds,
-            'timeout'             => $this->timeout,
-            'tries'               => $this->tries,
+            'timeout' => $this->timeout,
+            'tries' => $this->tries,
         ]);
 
-        $settingsService          = app(AdminSettingsService::class);
-        $this->firestoreSettings  = $settingsService->firestoreSettings();
-        $this->cricbuzzSettings   = $settingsService->cricbuzzSettings();
+        $settingsService = app(AdminSettingsService::class);
 
-        $this->apiHost             = $this->cricbuzzSettings['host'] ?? $this->apiHost;
-        $this->baseUrl             = sprintf('https://%s/mcenter/v1/', $this->apiHost);
-        $this->matchesCollection   = self::MATCHES_COLLECTION;
+        if (!$settingsService->isCronEnabled(self::CRON_KEY)) {
+            $this->log('job_disabled', 'warning', 'Scorecard sync job paused via emergency controls.');
+            return;
+        }
+
+        $this->firestoreSettings = $settingsService->firestoreSettings();
+        $this->cricbuzzSettings = $settingsService->cricbuzzSettings();
+
+        $this->apiHost = $this->cricbuzzSettings['host'] ?? $this->apiHost;
+        $this->baseUrl = sprintf('https://%s/mcenter/v1/', $this->apiHost);
+        $this->matchesCollection = self::MATCHES_COLLECTION;
         $this->scorecardsCollection = self::SCORECARDS_COLLECTION;
 
         try {
@@ -115,7 +123,7 @@ class SyncScorecardJob implements ShouldQueue
             $apiSummary = $this->getApiCallBreakdown();
             $this->log('no_matches', 'warning', 'No live matches found for scorecard sync', [
                 'requested_ids' => $this->matchIds,
-                'api_calls'     => $apiSummary,
+                'api_calls' => $apiSummary,
             ]);
             $this->finalize('warning');
             return;
@@ -123,7 +131,7 @@ class SyncScorecardJob implements ShouldQueue
 
         $this->log('matches_resolved', 'info', 'Resolved match IDs for scorecard sync', [
             'match_count' => count($this->targetMatchIds),
-            'match_ids'   => $this->targetMatchIds,
+            'match_ids' => $this->targetMatchIds,
         ]);
 
         foreach ($this->targetMatchIds as $matchId) {
@@ -165,8 +173,8 @@ class SyncScorecardJob implements ShouldQueue
             $snapshot = $docRef->snapshot();
             if ($snapshot->exists()) {
                 $existingData = $snapshot->data();
-                $lastFetched  = (int) ($existingData['lastFetched'] ?? 0);
-                $ageMs        = now()->valueOf() - $lastFetched;
+                $lastFetched = (int) ($existingData['lastFetched'] ?? 0);
+                $ageMs = now()->valueOf() - $lastFetched;
 
                 if ($lastFetched > 0 && $ageMs < self::SCORECARD_STALE_AFTER_MS) {
                     $shouldRefresh = false;
@@ -195,18 +203,18 @@ class SyncScorecardJob implements ShouldQueue
         if (!$response->successful()) {
             $this->log('scorecard_fetch_error', 'error', 'Scorecard API returned an error response', $this->responseContext($response, [
                 'match_id' => $matchId,
-                'url'      => $url,
+                'url' => $url,
             ]));
             throw new \RuntimeException('Scorecard API returned error code ' . $response->status());
         }
 
         $payload = $response->json();
         $payload['lastFetched'] = now()->valueOf();
-        
+
         if (!is_array($payload) || empty($payload)) {
             $this->log('scorecard_fetch_invalid', 'warning', 'Scorecard API returned empty payload', [
                 'match_id' => $matchId,
-                'url'      => $url,
+                'url' => $url,
             ]);
             return false;
         }
@@ -227,8 +235,8 @@ class SyncScorecardJob implements ShouldQueue
 
             return Http::withHeaders([
                 'x-rapidapi-host' => $this->apiHost,
-                'x-rapidapi-key'  => $this->apiKey,
-                'Content-Type'    => 'application/json; charset=UTF-8',
+                'x-rapidapi-key' => $this->apiKey,
+                'Content-Type' => 'application/json; charset=UTF-8',
             ])->get($url);
         } catch (Throwable $e) {
             $this->log('api_request_failed', 'error', 'API request threw an exception', $this->exceptionContext($e, [
@@ -242,11 +250,11 @@ class SyncScorecardJob implements ShouldQueue
 
     private function initializeClients(): FirestoreClient
     {
-        $keyPath   = $this->firestoreSettings['sa_json'] ?? config('services.firestore.sa_json');
+        $keyPath = $this->firestoreSettings['sa_json'] ?? config('services.firestore.sa_json');
         $projectId = $this->firestoreSettings['project_id'] ?? config('services.firestore.project_id');
 
         if (!$projectId && $keyPath && is_file($keyPath)) {
-            $json      = json_decode(file_get_contents($keyPath), true);
+            $json = json_decode(file_get_contents($keyPath), true);
             $projectId = $json['project_id'] ?? null;
         }
 
@@ -278,7 +286,7 @@ class SyncScorecardJob implements ShouldQueue
             $resolved = array_values(array_unique(array_map(static fn($id) => (string) $id, $this->matchIds)));
             $this->log('match_ids_provided', 'info', 'Using provided match IDs for scorecard sync', [
                 'match_count' => count($resolved),
-                'match_ids'   => $resolved,
+                'match_ids' => $resolved,
             ]);
 
             return $resolved;
@@ -313,7 +321,7 @@ class SyncScorecardJob implements ShouldQueue
         $resolved = array_values(array_unique($ids));
 
         $this->log('match_ids_discovered', 'info', 'Discovered match IDs from Firestore', [
-            'match_ids'   => $resolved,
+            'match_ids' => $resolved,
             'match_count' => count($resolved),
         ]);
 
@@ -326,11 +334,11 @@ class SyncScorecardJob implements ShouldQueue
 
         $this->log('job_completed', $status, 'SyncScorecard job finished', [
             'matches_considered' => count($this->targetMatchIds),
-            'scorecards_synced'  => $this->scorecardsSynced,
+            'scorecards_synced' => $this->scorecardsSynced,
             'scorecards_skipped' => $this->scorecardsSkipped,
-            'scorecards_failed'  => $this->scorecardsFailed,
-            'requested_ids'      => $this->matchIds,
-            'api_calls'          => $apiSummary,
+            'scorecards_failed' => $this->scorecardsFailed,
+            'requested_ids' => $this->matchIds,
+            'api_calls' => $apiSummary,
         ]);
     }
 

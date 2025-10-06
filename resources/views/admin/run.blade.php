@@ -51,9 +51,23 @@
         'labels' => $apiBreakdown->pluck('label'),
         'data'   => $apiBreakdown->pluck('count'),
     ];
+
+    $disabled = $disabled ?? ($run['disabled'] ?? false);
 @endphp
 
 <div class="stacked-section" style="gap: 28px;">
+    @if($disabled)
+        <section class="card" style="border-left: 4px solid rgba(234, 179, 8, 0.6); background: rgba(22, 45, 75, 0.7);">
+            <div class="section-title" style="margin-bottom: 8px;">
+                <span>Emergency pause active</span>
+                <span class="status-pill warning">PAUSED</span>
+            </div>
+            <p class="section-subtitle" style="margin: 0;">
+                This job is currently disabled via the emergency controls. No new runs will be scheduled until it is resumed.
+            </p>
+        </section>
+    @endif
+
     <section class="card" style="border-top: 3px solid {{ $accentPalette[$job['accent']] ?? 'rgba(148,163,184,0.35)' }};">
         <div class="section-title">
             <div class="run-id-cell">

@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Admin\AuthController;
 use App\Http\Controllers\Admin\CronDashboardController;
+use App\Http\Controllers\Admin\CronEmergencyController;
 use App\Http\Controllers\Admin\MaintenanceController;
 use App\Http\Controllers\Admin\PauseWindowController;
 use App\Http\Controllers\Admin\SettingsController;
@@ -21,6 +22,8 @@ Route::prefix('/')->name('admin.')->group(function () {
         Route::get('/', [CronDashboardController::class, 'index'])->name('dashboard');
         Route::get('/jobs/{job}', [CronDashboardController::class, 'job'])->name('jobs.show');
         Route::get('/jobs/{job}/runs/{runId}', [CronDashboardController::class, 'run'])->name('jobs.runs.show');
+        Route::get('/emergency', [CronEmergencyController::class, 'index'])->name('emergency.index');
+        Route::post('/emergency/toggle', [CronEmergencyController::class, 'toggle'])->name('emergency.toggle');
         Route::get('/settings', [SettingsController::class, 'edit'])->name('settings.edit');
         Route::put('/settings/firestore', [SettingsController::class, 'updateFirestore'])->name('settings.firestore');
         Route::put('/settings/cricbuzz', [SettingsController::class, 'updateCricbuzz'])->name('settings.cricbuzz');

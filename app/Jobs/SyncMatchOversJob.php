@@ -20,6 +20,7 @@ class SyncMatchOversJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels, ApiLogging;
 
+    private const CRON_KEY = 'match-overs';
     public int $timeout = 600;
     public int $tries = 5;
 
@@ -73,6 +74,12 @@ class SyncMatchOversJob implements ShouldQueue
         ]);
 
         $settingsService = app(AdminSettingsService::class);
+
+        if (!$settingsService->isCronEnabled(self::CRON_KEY)) {
+            $this->log('job_disabled', 'warning', 'Match overs job paused via emergency controls.');
+            return;
+        }
+
         $this->firestoreSettings = $settingsService->firestoreSettings();
         $this->cricbuzzSettings = $settingsService->cricbuzzSettings();
 

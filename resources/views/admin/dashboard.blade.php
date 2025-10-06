@@ -70,6 +70,7 @@
                 $windowApi = $summary['api_window_summary'] ?? null;
                 $windowApiTotal = $windowApi['total'] ?? null;
                 $windowApiBreakdown = $windowApi['breakdown'] ?? [];
+                $disabled = $summary['disabled'] ?? false;
             @endphp
             <a class="card" href="{{ route('admin.jobs.show', $summary['key']) }}" style="border-top: 3px solid {{ $accentPalette[$summary['accent']] ?? 'rgba(148,163,184,0.35)' }};">
                 <div class="card-header">
@@ -77,7 +78,12 @@
                         <div class="card-title">{{ $summary['label'] }}</div>
                         <div class="card-subtitle">{{ $summary['description'] }}</div>
                     </div>
-                    <span class="{{ $statusClass }}">{{ $statusLabel }}</span>
+                    <div style="display: flex; gap: 8px;">
+                        <span class="{{ $statusClass }}">{{ $statusLabel }}</span>
+                        @if($disabled)
+                            <span class="status-pill warning">PAUSED</span>
+                        @endif
+                    </div>
                 </div>
 
                 <div class="metrics-row">

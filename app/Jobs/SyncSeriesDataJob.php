@@ -452,8 +452,8 @@ class SyncSeriesDataJob implements ShouldQueue
                             'seriesId'  => (int) $seriesId,
                             'matchInfo' => array_merge($matchInfo, [
                                 'state_lowercase' => $state !== null ? strtolower($state) : null,
-                                'startDate'       => $startDate,
-                                'endDate'         => $endDate,
+                                'startdate'       => $startDate,
+                                'enddate'         => $endDate,
                             ]),
                             'updatedAt' => now()->getTimestamp() * 1000,
                         ]);

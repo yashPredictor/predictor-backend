@@ -11,6 +11,8 @@ return new class extends Migration {
         'match_overs_sync_logs',
         'match_info_sync_logs',
         'scorecard_sync_logs',
+        'series_squad_sync_logs',
+        'recent_match_status_logs',
         'squad_sync_logs',
     ];
 

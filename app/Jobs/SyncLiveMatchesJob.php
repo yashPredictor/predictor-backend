@@ -12,6 +12,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Http;
 use Throwable;
 
@@ -19,23 +20,30 @@ class SyncLiveMatchesJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels, ApiLogging;
 
-    public int $timeout = 300;
-    public int $tries   = 5;
+    public int $timeout = 600;
+
+    public int $tries = 5;
 
     private ?FirestoreClient $firestore = null;
-    private ?string $apiKey    = null;
-    private string $apiHost;
-    private LiveMatchSyncLogger $logger;
-    private array $firestoreSettings = [];
-    private array $cricbuzzSettings  = [];
 
-    /**
-     * @param string[] $matchIds
-     */
+    private ?string $apiKey = null;
+
+    private string $apiHost;
+
+    private LiveMatchSyncLogger $logger;
+
+    private array $firestoreSettings = [];
+
+    private array $cricbuzzSettings = [];
+
+    /** @var string[] */
+    private array $candidateMatchIds = [];
+
     public function __construct(
         private readonly array $matchIds = [],
         private ?string $runId = null,
-    ) {}
+    ) {
+    }
 
     /**
      * @return string[]
@@ -48,18 +56,18 @@ class SyncLiveMatchesJob implements ShouldQueue
     public function handle(): void
     {
         $this->apiHost = config('services.cricbuzz.host', 'cricbuzz-cricket2.p.rapidapi.com');
-        $this->logger  = new LiveMatchSyncLogger($this->runId);
-        $this->runId   = $this->logger->runId;
+        $this->logger = new LiveMatchSyncLogger($this->runId);
+        $this->runId = $this->logger->runId;
 
         $this->log('job_started', 'info', 'SyncLiveMatches job started', [
             'matchIds' => $this->matchIds,
-            'timeout'  => $this->timeout,
-            'tries'    => $this->tries,
+            'timeout' => $this->timeout,
+            'tries' => $this->tries,
         ]);
 
-        $settingsService         = app(AdminSettingsService::class);
+        $settingsService = app(AdminSettingsService::class);
         $this->firestoreSettings = $settingsService->firestoreSettings();
-        $this->cricbuzzSettings  = $settingsService->cricbuzzSettings();
+        $this->cricbuzzSettings = $settingsService->cricbuzzSettings();
 
         $this->apiHost = $this->cricbuzzSettings['host'] ?? $this->apiHost;
 
@@ -72,40 +80,97 @@ class SyncLiveMatchesJob implements ShouldQueue
             throw $e;
         }
 
+        $this->candidateMatchIds = $this->resolveCandidateMatchIds();
+
+        if (!empty($this->matchIds)) {
+            $manualIds = array_map(static fn($id) => (string) $id, $this->matchIds);
+            $this->candidateMatchIds = array_values(array_intersect($this->candidateMatchIds, $manualIds));
+        }
+
+        if (empty($this->candidateMatchIds)) {
+            $windowStart = now()->copy()->subMinutes(15);
+            $windowEnd = now()->copy()->addMinutes(35);
+
+            $this->log('live_matches_candidates_empty', 'info', 'No matches scheduled inside the prefetch window', [
+                'window_start' => $windowStart->toIso8601String(),
+                'window_end' => $windowEnd->toIso8601String(),
+                'requested_ids' => $this->matchIds,
+            ]);
+
+            $apiSummary = $this->getApiCallBreakdown();
+            $this->log('job_completed', 'info', 'SyncLiveMatches job finished (no candidate matches)', [
+                'synced' => 0,
+                'skipped' => 0,
+                'failures' => [],
+                'api_calls' => $apiSummary,
+            ]);
+
+            return;
+        }
+
         $matches = $this->fetchLiveMatches();
+
         if (empty($matches)) {
             $apiSummary = $this->getApiCallBreakdown();
             $this->log('live_matches_empty', 'warning', 'No live matches returned by API', [
                 'requested_ids' => $this->matchIds,
-                'api_calls'     => $apiSummary,
+                'api_calls' => $apiSummary,
             ]);
             $this->log('job_completed', 'warning', 'SyncLiveMatches job finished', [
-                'synced'        => 0,
-                'skipped'       => 0,
-                'failures'      => [],
+                'synced' => 0,
+                'skipped' => 0,
+                'failures' => [],
                 'requested_ids' => $this->matchIds,
-                'api_calls'     => $apiSummary,
+                'api_calls' => $apiSummary,
             ]);
             return;
         }
 
         $this->log('live_matches_fetched', 'info', 'Fetched live matches from API', [
             'match_count' => count($matches),
-            'match_ids'   => array_map(static fn ($match) => $match['matchInfo']['matchId'] ?? null, $matches),
+            'match_ids' => array_map(static fn($match) => $match['matchInfo']['matchId'] ?? null, $matches),
+        ]);
+
+        $matches = $this->filterMatchesByStartWindow($matches);
+
+        if (empty($matches)) {
+            $windowStart = now()->copy()->subMinutes(15);
+            $windowEnd = now()->copy()->addMinutes(35);
+
+            $this->log('live_matches_window_empty', 'info', 'Matches from API did not fall within the start time window', [
+                'window_start' => $windowStart->toIso8601String(),
+                'window_end' => $windowEnd->toIso8601String(),
+                'candidate_matches' => $this->candidateMatchIds,
+            ]);
+
+            $apiSummary = $this->getApiCallBreakdown();
+            $this->log('job_completed', 'info', 'SyncLiveMatches job finished (window filter)', [
+                'synced' => 0,
+                'skipped' => 0,
+                'failures' => [],
+                'api_calls' => $apiSummary,
+            ]);
+
+            return;
+        }
+
+        $this->log('live_matches_filtered', 'info', 'Matches retained after window filter', [
+            'filtered_count' => count($matches),
+            'candidate_ids' => $this->candidateMatchIds,
         ]);
 
         $bulk = $this->firestore->bulkWriter([
-            'maxBatchSize'        => 100,
+            'maxBatchSize' => 100,
             'initialOpsPerSecond' => 20,
-            'maxOpsPerSecond'     => 60,
+            'maxOpsPerSecond' => 60,
         ]);
 
-        $matchFilterSet = !empty($this->matchIds)
-            ? array_fill_keys(array_map(static fn ($id) => (string) $id, $this->matchIds), false)
+        $matchFilterSet = !empty($this->candidateMatchIds)
+            ? array_fill_keys($this->candidateMatchIds, false)
             : null;
 
-        $synced   = 0;
-        $skipped  = 0;
+        $synced = 0;
+        $skipped = 0;
         $failures = [];
 
         foreach ($matches as $match) {
@@ -114,7 +179,7 @@ class SyncLiveMatchesJob implements ShouldQueue
                 $skipped++;
                 $this->log('match_skipped', 'warning', 'Match payload missing matchInfo block', [
                     'payload_keys' => array_keys($match),
-                    'raw_payload'  => $match,
+                    'raw_payload' => $match,
                 ]);
                 continue;
             }
@@ -124,7 +189,7 @@ class SyncLiveMatchesJob implements ShouldQueue
                 $skipped++;
                 $this->log('match_skipped', 'warning', 'Match info missing matchId', [
                     'matchInfo_keys' => array_keys($matchInfo),
-                    'matchInfo'      => $matchInfo,
+                    'matchInfo' => $matchInfo,
                 ]);
                 continue;
             }
@@ -142,10 +207,10 @@ class SyncLiveMatchesJob implements ShouldQueue
 
             try {
                 $preparedMatchInfo = $this->prepareMatchInfo($matchInfo);
-                $matchDocData      = $this->prepareMatchDocument($match, $preparedMatchInfo);
+                $matchDocData = $this->prepareMatchDocument($match, $preparedMatchInfo);
 
-                $matchRef          = $this->firestore->collection('matches')->document($matchId);
-                $existingSnapshot  = $matchRef->snapshot();
+                $matchRef = $this->firestore->collection('matches')->document($matchId);
+                $existingSnapshot = $matchRef->snapshot();
 
                 if ($existingSnapshot->exists()) {
                     $existingData = $existingSnapshot->data();
@@ -161,20 +226,18 @@ class SyncLiveMatchesJob implements ShouldQueue
 
                 $bulk->set($matchRef, $matchDocData, ['merge' => true]);
 
-                // $infoRef = $this->firestore->collection('matchInfo')->document($matchId);
-                // $bulk->set($infoRef, $preparedMatchInfo, ['merge' => true]);
-
                 $synced++;
+
                 $this->log('match_synced', 'success', 'Synced live match', [
-                    'match_id'    => $matchId,
-                    'match_doc'   => $matchDocData,
-                    'match_info'  => $preparedMatchInfo,
+                    'match_id' => $matchId,
+                    'match_doc' => $matchDocData,
+                    'match_info' => $preparedMatchInfo,
                 ]);
             } catch (Throwable $e) {
                 $failures[] = $matchId;
                 $this->log('match_persist_failed', 'error', 'Failed to persist live match', $this->exceptionContext($e, [
-                    'match_id'   => $matchId,
-                    'match_doc'  => $match,
+                    'match_id' => $matchId,
+                    'match_doc' => $match,
                 ]));
             }
         }
@@ -183,11 +246,11 @@ class SyncLiveMatchesJob implements ShouldQueue
         $bulk->close();
 
         if ($matchFilterSet !== null) {
-            $missing = array_keys(array_filter($matchFilterSet, static fn ($hit) => !$hit));
+            $missing = array_keys(array_filter($matchFilterSet, static fn($hit) => !$hit));
             if (!empty($missing)) {
                 $this->log('match_filter_missing', 'warning', 'Provided match IDs not present in live feed', [
                     'missing_match_ids' => $missing,
-                    'requested_ids'     => $this->matchIds,
+                    'requested_ids' => $this->matchIds,
                 ]);
             }
         }
@@ -195,21 +258,21 @@ class SyncLiveMatchesJob implements ShouldQueue
         $apiSummary = $this->getApiCallBreakdown();
 
         $this->log('job_completed', empty($failures) ? 'success' : 'warning', 'SyncLiveMatches job finished', [
-            'synced'        => $synced,
-            'skipped'       => $skipped,
-            'failures'      => array_values(array_unique(array_filter($failures))),
+            'synced' => $synced,
+            'skipped' => $skipped,
+            'failures' => array_values(array_unique(array_filter($failures))),
             'requested_ids' => $this->matchIds,
-            'api_calls'     => $apiSummary,
+            'api_calls' => $apiSummary,
         ]);
     }
 
     private function initializeClients(): FirestoreClient
     {
-        $keyPath   = $this->firestoreSettings['sa_json'] ?? config('services.firestore.sa_json');
+        $keyPath = $this->firestoreSettings['sa_json'] ?? config('services.firestore.sa_json');
         $projectId = $this->firestoreSettings['project_id'] ?? config('services.firestore.project_id');
 
         if (!$projectId && $keyPath && is_file($keyPath)) {
-            $json      = json_decode(file_get_contents($keyPath), true);
+            $json = json_decode(file_get_contents($keyPath), true);
             $projectId = $json['project_id'] ?? null;
         }
 
@@ -241,8 +304,8 @@ class SyncLiveMatchesJob implements ShouldQueue
 
         $headers = [
             'x-rapidapi-host' => $this->apiHost,
-            'x-rapidapi-key'  => $this->apiKey,
-            'Content-Type'    => 'application/json; charset=UTF-8',
+            'x-rapidapi-key' => $this->apiKey,
+            'Content-Type' => 'application/json; charset=UTF-8',
         ];
 
         try {
@@ -274,7 +337,7 @@ class SyncLiveMatchesJob implements ShouldQueue
 
         $storeMatch = function (array $match) use (&$matches): void {
             $matchInfo = $match['matchInfo'] ?? null;
-            $matchId   = null;
+            $matchId = null;
 
             if (is_array($matchInfo) && isset($matchInfo['matchId'])) {
                 $matchId = (string) $matchInfo['matchId'];
@@ -342,7 +405,7 @@ class SyncLiveMatchesJob implements ShouldQueue
 
         $this->log('api_response_parsed', 'info', 'Parsed live matches payload', [
             'raw_match_count' => count($matches),
-            'payload'         => $payload,
+            'payload' => $payload,
         ]);
 
         return array_values($matches);
@@ -357,7 +420,7 @@ class SyncLiveMatchesJob implements ShouldQueue
         $prepared = $matchInfo;
 
         $prepared['matchId'] = (int) ($matchInfo['matchId'] ?? 0);
-        if ($prepared['matchId'] === '') {
+        if ($prepared['matchId'] === 0) {
             unset($prepared['matchId']);
         }
 
@@ -371,7 +434,7 @@ class SyncLiveMatchesJob implements ShouldQueue
             }
         }
 
-          foreach (['seriesStartDt', 'seriesEndDt'] as $timestampKey) {
+        foreach (['seriesStartDt', 'seriesEndDt'] as $timestampKey) {
             if (isset($matchInfo[$timestampKey])) {
                 $prepared[$timestampKey] = (string) $matchInfo[$timestampKey];
             }
@@ -387,12 +450,12 @@ class SyncLiveMatchesJob implements ShouldQueue
      */
     private function prepareMatchDocument(array $match, array $preparedMatchInfo): array
     {
-        $document              = $match;
-        $document['matchInfo'] = $preparedMatchInfo;
+        $document = $match;
+        $document['matchInfo'] = array_change_key_case($preparedMatchInfo, CASE_LOWER);
         $document['updatedAt'] = now()->valueOf();
 
         if (isset($preparedMatchInfo['matchId'])) {
-            $document['matchId'] = $preparedMatchInfo['matchId'];
+            $document['matchId'] = (int) $preparedMatchInfo['matchId'];
         }
 
         if (isset($preparedMatchInfo['seriesId'])) {
@@ -404,6 +467,124 @@ class SyncLiveMatchesJob implements ShouldQueue
         }
 
         return $document;
+    }
+
+    private function resolveCandidateMatchIds(): array
+    {
+        $upcoming = ['preview', 'upcoming', 'toss', 'toss delay', 'toss delayed'];
+        $live = ['live', 'current', 'inprogress', 'in progress'];
+        $states = array_values(array_unique(array_map('strtolower', array_merge($upcoming, $live))));
+
+        $now = Carbon::now();
+        $windowStartMs = $now->copy()->subMinutes(15)->getTimestampMs();
+        $windowEndMs = $now->copy()->addMinutes(35)->getTimestampMs();
+
+        try {
+            $documents = $this->firestore
+                ->collection('matches')
+                ->where('matchInfo.state_lowercase', 'in', $states)
+                ->where('matchInfo.startdate', '>=', $windowStartMs)
+                ->where('matchInfo.startdate', '<=', $windowEndMs)
+                ->documents();
+        } catch (Throwable $e) {
+            $this->log(
+                'candidate_lookup_failed',
+                'error',
+                'Failed to resolve matches from Firestore',
+                $this->exceptionContext($e)
+            );
+            return [];
+        }
+
+        $matches = [];
+
+        foreach ($documents as $snap) {
+            if ($snap->exists()) {
+                $matches[] = (int) $snap->id();
+            }
+        }
+
+        $matches = array_values(array_unique($matches));
+
+        $this->log(
+            'candidate_matches_resolved',
+            'info',
+            'Upcoming/just-started matches resolved from Firestore window',
+            [
+                'count' => count($matches),
+                'window_start' => Carbon::createFromTimestampMs($windowStartMs)->toIso8601String(),
+                'now' => $now->toIso8601String(),
+                'window_end' => Carbon::createFromTimestampMs($windowEndMs)->toIso8601String(),
+            ]
+        );
+
+        return $matches;
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $matches
+     * @return array<int, array<string, mixed>>
+     */
+    private function filterMatchesByStartWindow(array $matches): array
+    {
+        $windowStart = now()->copy()->subMinutes(15);
+        $windowEnd = now()->copy()->addMinutes(35);
+
+        $filtered = array_filter($matches, function ($match) use ($windowStart, $windowEnd) {
+            $matchId = (int) data_get($match, 'matchInfo.matchId', '');
+
+            if (!empty($this->candidateMatchIds) && !in_array($matchId, $this->candidateMatchIds, true)) {
+                return false;
+            }
+
+            $startRaw = data_get($match, 'matchInfo.startDate');
+            $startAt = $this->normaliseToCarbon($startRaw);
+
+            if (!$startAt) {
+                return false;
+            }
+
+            return $startAt->between($windowStart, $windowEnd, true);
+        });
+
+        return array_values($filtered);
+    }
+
+    private function normaliseToCarbon($value): ?Carbon
+    {
+        if ($value instanceof Carbon) {
+            return $value;
+        }
+
+        if ($value instanceof \DateTimeInterface) {
+            return Carbon::instance($value);
+        }
+
+        if (is_numeric($value)) {
+            $numeric = (int) $value;
+
+            if ($numeric > 1_000_000_000_000) {
+                return Carbon::createFromTimestampMs($numeric);
+            }
+
+            return Carbon::createFromTimestamp($numeric);
+        }
+
+        if (is_string($value) && trim($value) !== '') {
+            $trimmed = trim($value);
+
+            if (is_numeric($trimmed)) {
+                return $this->normaliseToCarbon((int) $trimmed);
+            }
+
+            try {
+                return Carbon::parse($trimmed);
+            } catch (\Exception $e) {
+                return null;
+            }
+        }
+
+        return null;
     }
 
     private function log(string $action, ?string $status, string $message, array $context = []): void

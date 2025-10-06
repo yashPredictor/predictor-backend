@@ -321,6 +321,8 @@
             display: flex;
             flex-direction: column;
             gap: 6px;
+            width: 47%;
+            justify-content: center;
         }
 
         .status-pill {
@@ -661,6 +663,7 @@
             font-size: 0.78rem;
             color: #cbd5f5;
             overflow-x: auto;
+            max-width: 100%;
         }
 
         .timeline {
@@ -857,7 +860,7 @@
     @endif
     @stack('scripts')
     <script>
-        (function() {
+        (function () {
             const toast = typeof window !== 'undefined' ? window.__adminToast : null;
             if (!toast) {
                 return;
@@ -882,7 +885,7 @@
         })();
     </script>
     <script>
-        (function() {
+        (function () {
             const buttons = document.querySelectorAll('.copy-button[data-copy-text]');
             if (!buttons.length) {
                 return;

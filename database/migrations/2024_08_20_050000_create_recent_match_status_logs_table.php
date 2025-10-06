@@ -1,0 +1,25 @@
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration {
+    public function up(): void
+    {
+        Schema::create('recent_match_status_logs', function (Blueprint $table) {
+            $table->id();
+            $table->uuid('run_id');
+            $table->string('action');
+            $table->string('status')->nullable();
+            $table->text('message')->nullable();
+            $table->json('context')->nullable();
+            $table->timestamp('created_at')->useCurrent();
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('recent_match_status_logs');
+    }
+};

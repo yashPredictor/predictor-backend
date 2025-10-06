@@ -3,7 +3,9 @@
 use App\Jobs\SyncLiveMatchesJob;
 use App\Jobs\SyncMatchOversJob;
 use App\Jobs\SyncScorecardJob;
+use App\Jobs\MoveEndedMatchesToRecentJob;
 use App\Jobs\SyncSeriesDataJob;
+use App\Jobs\SyncSeriesSquadJob;
 use App\Jobs\SyncSquadJob;
 use App\Services\PauseWindowService;
 use Illuminate\Console\Scheduling\Schedule;
@@ -23,34 +25,30 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withSchedule(function (Schedule $schedule): void {
         $shouldRun = static fn(): bool => !app(PauseWindowService::class)->isPaused();
 
-        // $schedule->job(new SyncSeriesDataJob())
-        //     ->cron('0 0 */3 * *')
-        //     ->withoutOverlapping()
-        //     ->when($shouldRun);
-        // $schedule->job(new SyncLiveMatchesJob())
-        //     ->everyFiveMinutes()
-        //     ->withoutOverlapping()
-        //     ->when($shouldRun);
+        $schedule->job(new SyncScorecardJob())
+            ->cron('*/30 * * * * *')
+            ->withoutOverlapping()
+            ->when($shouldRun);
 
-        // $schedule->job(new SyncMatchOversJob())
-        //     ->everyMinute()
-        //     ->withoutOverlapping()
-        //     ->when($shouldRun);
+        $schedule->job(new SyncSquadJob())
+            ->dailyAt('06:00')
+            ->withoutOverlapping()
+            ->when($shouldRun);
 
-        // $schedule->job(new SyncScorecardJob())
-        //     ->everyThirtySeconds()
-        //     ->withoutOverlapping()
-        //     ->when($shouldRun);
+        $schedule->job(new SyncSeriesSquadJob())
+            ->dailyAt('05:15')
+            ->withoutOverlapping()
+            ->when($shouldRun);
 
-        // $schedule->job(new SyncSquadJob())
-        //     ->dailyAt('06:00')
-        //     ->withoutOverlapping()
-        //     ->when($shouldRun);
+        $schedule->job(new MoveEndedMatchesToRecentJob())
+            ->everyTenMinutes()
+            ->withoutOverlapping()
+            ->when($shouldRun);
 
-        // $schedule->command('logs:cleanup')
-        //     ->dailyAt('05:30')
-        //     ->withoutOverlapping()
-        //     ->when($shouldRun);
+        $schedule->command('logs:cleanup')
+            ->dailyAt('05:30')
+            ->withoutOverlapping()
+            ->when($shouldRun);
     })
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->alias([

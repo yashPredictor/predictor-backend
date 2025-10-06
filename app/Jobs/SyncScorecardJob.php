@@ -21,7 +21,7 @@ class SyncScorecardJob implements ShouldQueue
 
     private const SCORECARD_STALE_AFTER_MS = 60_000;
     private const MATCHES_COLLECTION       = 'matches';
-    private const SCORECARDS_COLLECTION    = 'scorecards';
+    private const SCORECARDS_COLLECTION    = 'scorecard';
 
     public int $timeout = 600;
 
@@ -201,6 +201,8 @@ class SyncScorecardJob implements ShouldQueue
         }
 
         $payload = $response->json();
+        $payload['lastFetched'] = now()->valueOf();
+        
         if (!is_array($payload) || empty($payload)) {
             $this->log('scorecard_fetch_invalid', 'warning', 'Scorecard API returned empty payload', [
                 'match_id' => $matchId,

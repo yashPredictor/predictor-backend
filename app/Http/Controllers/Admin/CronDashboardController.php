@@ -5,7 +5,9 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\LiveMatchSyncLog;
 use App\Models\MatchOversSyncLog;
+use App\Models\RecentMatchStatusLog;
 use App\Models\SeriesSyncLog;
+use App\Models\SeriesSquadSyncLog;
 use App\Models\ScorecardSyncLog;
 use App\Models\SquadSyncLog;
 use Illuminate\Http\Request;
@@ -48,6 +50,18 @@ class CronDashboardController extends Controller
             'description' => 'Preloads squad lists ahead of upcoming matches.',
             'accent'      => 'amber',
             'model'       => SquadSyncLog::class,
+        ],
+        'series-squads' => [
+            'label'       => 'Series Squad Sync',
+            'description' => 'Caches squad information for upcoming series.',
+            'accent'      => 'violet',
+            'model'       => SeriesSquadSyncLog::class,
+        ],
+        'recent-matches' => [
+            'label'       => 'Recent Matches Sync',
+            'description' => 'Promotes recently completed matches into the recent state.',
+            'accent'      => 'slate',
+            'model'       => RecentMatchStatusLog::class,
         ],
     ];
 

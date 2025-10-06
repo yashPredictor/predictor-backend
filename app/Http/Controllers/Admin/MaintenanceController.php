@@ -80,6 +80,9 @@ class MaintenanceController extends Controller
             'match_overs_sync_logs' => 'Match Overs Sync Logs',
             'match_info_sync_logs'  => 'Match Info Sync Logs',
             'scorecard_sync_logs'   => 'Scorecard Sync Logs',
+            'series_squad_sync_logs'=> 'Series Squad Sync Logs',
+            'recent_match_status_logs' => 'Recent Match Status Logs',
+            'squad_sync_logs'       => 'Squad Sync Logs',
         ];
     }
 }

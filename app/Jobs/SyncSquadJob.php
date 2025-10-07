@@ -21,16 +21,12 @@ class SyncSquadJob implements ShouldQueue
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels, ApiLogging;
 
     private const SQUAD_STALE_AFTER_MS = 600_000;
-
     private const ALLOWED_STATES = ['preview', 'upcoming'];
     private const CRON_KEY = 'squads';
     private const MATCHES_COLLECTION = 'matches';
-    private const SQUADS_COLLECTION  = 'squads';
-
+    private const SQUADS_COLLECTION = 'squads';
     public int $timeout = 600;
-
     public int $tries = 5;
-
     private ?FirestoreClient $firestore = null;
     private ?string $apiKey = null;
     private string $apiHost;
@@ -39,21 +35,17 @@ class SyncSquadJob implements ShouldQueue
     private string $squadsCollection;
     private SquadSyncLogger $logger;
     private array $firestoreSettings = [];
-    private array $cricbuzzSettings  = [];
-
-    /** @var string[] */
+    private array $cricbuzzSettings = [];
     private array $targetMatchIds = [];
-
     private int $squadsSynced = 0;
-
     private int $squadsSkipped = 0;
-    
     private int $squadsFailed = 0;
 
     public function __construct(
         private readonly array $matchIds = [],
         private ?string $runId = null,
-    ) {}
+    ) {
+    }
 
     /**
      * @return string[]
@@ -65,34 +57,34 @@ class SyncSquadJob implements ShouldQueue
 
     public function handle(): void
     {
-        $this->apiHost           = config('services.cricbuzz.host', 'cricbuzz-cricket2.p.rapidapi.com');
-        $this->baseUrl           = sprintf('https://%s/mcenter/v1/', $this->apiHost);
+        $this->apiHost = config('services.cricbuzz.host', 'cricbuzz-cricket2.p.rapidapi.com');
+        $this->baseUrl = sprintf('https://%s/mcenter/v1/', $this->apiHost);
         $this->matchesCollection = self::MATCHES_COLLECTION;
-        $this->squadsCollection  = self::SQUADS_COLLECTION;
+        $this->squadsCollection = self::SQUADS_COLLECTION;
 
         $this->logger = new SquadSyncLogger($this->runId);
-        $this->runId  = $this->logger->runId;
+        $this->runId = $this->logger->runId;
 
         $this->log('job_started', 'info', 'SyncSquad job started', [
             'requested_match_ids' => $this->matchIds,
-            'timeout'             => $this->timeout,
-            'tries'               => $this->tries,
+            'timeout' => $this->timeout,
+            'tries' => $this->tries,
         ]);
 
-        $settingsService          = app(AdminSettingsService::class);
+        $settingsService = app(AdminSettingsService::class);
 
         if (!$settingsService->isCronEnabled(self::CRON_KEY)) {
             $this->log('job_disabled', 'warning', 'Squad sync job paused via emergency controls.');
             return;
         }
 
-        $this->firestoreSettings  = $settingsService->firestoreSettings();
-        $this->cricbuzzSettings   = $settingsService->cricbuzzSettings();
+        $this->firestoreSettings = $settingsService->firestoreSettings();
+        $this->cricbuzzSettings = $settingsService->cricbuzzSettings();
 
-        $this->apiHost           = $this->cricbuzzSettings['host'] ?? $this->apiHost;
-        $this->baseUrl           = sprintf('https://%s/mcenter/v1/', $this->apiHost);
+        $this->apiHost = $this->cricbuzzSettings['host'] ?? $this->apiHost;
+        $this->baseUrl = sprintf('https://%s/mcenter/v1/', $this->apiHost);
         $this->matchesCollection = self::MATCHES_COLLECTION;
-        $this->squadsCollection  = self::SQUADS_COLLECTION;
+        $this->squadsCollection = self::SQUADS_COLLECTION;
 
         try {
             $this->firestore = $this->initializeClients();
@@ -109,7 +101,7 @@ class SyncSquadJob implements ShouldQueue
             $apiSummary = $this->getApiCallBreakdown();
             $this->log('no_matches', 'warning', 'No upcoming matches found for squad sync', [
                 'requested_ids' => $this->matchIds,
-                'api_calls'     => $apiSummary,
+                'api_calls' => $apiSummary,
             ]);
             $this->finalize('warning');
             return;
@@ -117,7 +109,7 @@ class SyncSquadJob implements ShouldQueue
 
         $this->log('matches_resolved', 'info', 'Resolved match IDs for squad sync', [
             'match_count' => count($this->targetMatchIds),
-            'match_ids'   => $this->targetMatchIds,
+            'match_ids' => $this->targetMatchIds,
         ]);
 
         foreach ($this->targetMatchIds as $matchId) {
@@ -157,9 +149,9 @@ class SyncSquadJob implements ShouldQueue
         try {
             $snapshot = $docRef->snapshot();
             if ($snapshot->exists()) {
-                $existing    = $snapshot->data();
+                $existing = $snapshot->data();
                 $lastFetched = (int) ($existing['lastFetched'] ?? 0);
-                $hasPlayers  = !empty(data_get($existing, 'squads.team1.players'))
+                $hasPlayers = !empty(data_get($existing, 'squads.team1.players'))
                     && !empty(data_get($existing, 'squads.team2.players'));
 
                 if ($hasPlayers) {
@@ -192,7 +184,7 @@ class SyncSquadJob implements ShouldQueue
         if (!$response->successful()) {
             $this->log('squads_fetch_error', 'error', 'Squads API returned an error response', $this->responseContext($response, [
                 'match_id' => $matchId,
-                'url'      => $url,
+                'url' => $url,
             ]));
             throw new \RuntimeException('Squads API returned error code ' . $response->status());
         }
@@ -201,14 +193,14 @@ class SyncSquadJob implements ShouldQueue
         if (!is_array($payload) || empty($payload)) {
             $this->log('squads_fetch_invalid', 'warning', 'Squads API returned empty payload', [
                 'match_id' => $matchId,
-                'url'      => $url,
+                'url' => $url,
             ]);
             return false;
         }
 
         $documentPayload = array_merge($payload, [
             'lastFetched' => now()->valueOf(),
-            'serverTime'  => now()->toIso8601String(),
+            'serverTime' => now()->toIso8601String(),
         ]);
 
         $docRef->set($documentPayload, ['merge' => true]);
@@ -227,8 +219,8 @@ class SyncSquadJob implements ShouldQueue
 
             return Http::withHeaders([
                 'x-rapidapi-host' => $this->apiHost,
-                'x-rapidapi-key'  => $this->apiKey,
-                'Content-Type'    => 'application/json; charset=UTF-8',
+                'x-rapidapi-key' => $this->apiKey,
+                'Content-Type' => 'application/json; charset=UTF-8',
             ])->get($url);
         } catch (Throwable $e) {
             $this->log('api_request_failed', 'error', 'API request threw an exception', $this->exceptionContext($e, [
@@ -242,11 +234,11 @@ class SyncSquadJob implements ShouldQueue
 
     private function initializeClients(): FirestoreClient
     {
-        $keyPath   = $this->firestoreSettings['sa_json'] ?? config('services.firestore.sa_json');
+        $keyPath = $this->firestoreSettings['sa_json'] ?? config('services.firestore.sa_json');
         $projectId = $this->firestoreSettings['project_id'] ?? config('services.firestore.project_id');
 
         if (!$projectId && $keyPath && is_file($keyPath)) {
-            $json      = json_decode(file_get_contents($keyPath), true);
+            $json = json_decode(file_get_contents($keyPath), true);
             $projectId = $json['project_id'] ?? null;
         }
 
@@ -349,7 +341,7 @@ class SyncSquadJob implements ShouldQueue
             } else {
                 $this->log('match_skipped_state', 'info', 'Skipping match for squad sync due to state filter', [
                     'match_id' => $matchId,
-                    'state'    => $state,
+                    'state' => $state,
                 ]);
             }
         }
@@ -363,11 +355,11 @@ class SyncSquadJob implements ShouldQueue
 
         $this->log('job_completed', $status, 'SyncSquad job finished', [
             'matches_considered' => count($this->targetMatchIds),
-            'squads_synced'      => $this->squadsSynced,
-            'squads_skipped'     => $this->squadsSkipped,
-            'squads_failed'      => $this->squadsFailed,
-            'requested_ids'      => $this->matchIds,
-            'api_calls'          => $apiSummary,
+            'squads_synced' => $this->squadsSynced,
+            'squads_skipped' => $this->squadsSkipped,
+            'squads_failed' => $this->squadsFailed,
+            'requested_ids' => $this->matchIds,
+            'api_calls' => $apiSummary,
         ]);
     }
 

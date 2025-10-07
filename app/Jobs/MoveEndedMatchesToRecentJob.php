@@ -96,11 +96,11 @@ class MoveEndedMatchesToRecentJob implements ShouldQueue
                 ->collection(self::MATCHES_COLLECTION)
                 ->document($matchId)
                 ->set([
-                    'status' => NULL,
                     'updatedAt' => now()->valueOf(),
                     'matchInfo' => [
                         'state' => 'Complete',
                         'state_lowercase' => 'complete',
+                        'status' => NULL,
                     ],
                 ], ['merge' => true]);
 
@@ -123,7 +123,7 @@ class MoveEndedMatchesToRecentJob implements ShouldQueue
      */
     private function fetchExpiredMatches(): array
     {
-        $cutoff = now()->copy()->addMinutes(5)->valueOf();
+        $cutoff = now()->copy()->addMinutes(10)->valueOf();
 
         try {
             $query = $this->firestore

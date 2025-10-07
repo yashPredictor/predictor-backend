@@ -20,6 +20,8 @@ class SyncLiveMatchesJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels, ApiLogging;
 
+    private const CRON_KEY = 'live-matches';
+    
     public int $timeout = 600;
 
     public int $tries = 5;
@@ -86,33 +88,33 @@ class SyncLiveMatchesJob implements ShouldQueue
             throw $e;
         }
 
-        $this->candidateMatchIds = $this->resolveCandidateMatchIds();
+        // $this->candidateMatchIds = $this->resolveCandidateMatchIds();
 
-        if (!empty($this->matchIds)) {
-            $manualIds = array_map(static fn($id) => (string) $id, $this->matchIds);
-            $this->candidateMatchIds = array_values(array_intersect($this->candidateMatchIds, $manualIds));
-        }
+        // if (!empty($this->matchIds)) {
+        //     $manualIds = array_map(static fn($id) => (string) $id, $this->matchIds);
+        //     $this->candidateMatchIds = array_values(array_intersect($this->candidateMatchIds, $manualIds));
+        // }
 
-        if (empty($this->candidateMatchIds)) {
-            $windowStart = now()->copy()->subMinutes(15);
-            $windowEnd = now()->copy()->addMinutes(35);
+        // if (empty($this->candidateMatchIds)) {
+        //     $windowStart = now()->copy()->subMinutes(15);
+        //     $windowEnd = now()->copy()->addMinutes(35);
 
-            $this->log('live_matches_candidates_empty', 'info', 'No matches scheduled inside the prefetch window', [
-                'window_start' => $windowStart->toIso8601String(),
-                'window_end' => $windowEnd->toIso8601String(),
-                'requested_ids' => $this->matchIds,
-            ]);
+        //     $this->log('live_matches_candidates_empty', 'info', 'No matches scheduled inside the prefetch window', [
+        //         'window_start' => $windowStart->toIso8601String(),
+        //         'window_end' => $windowEnd->toIso8601String(),
+        //         'requested_ids' => $this->matchIds,
+        //     ]);
 
-            $apiSummary = $this->getApiCallBreakdown();
-            $this->log('job_completed', 'info', 'SyncLiveMatches job finished (no candidate matches)', [
-                'synced' => 0,
-                'skipped' => 0,
-                'failures' => [],
-                'api_calls' => $apiSummary,
-            ]);
+        //     $apiSummary = $this->getApiCallBreakdown();
+        //     $this->log('job_completed', 'info', 'SyncLiveMatches job finished (no candidate matches)', [
+        //         'synced' => 0,
+        //         'skipped' => 0,
+        //         'failures' => [],
+        //         'api_calls' => $apiSummary,
+        //     ]);
 
-            return;
-        }
+        //     return;
+        // }
 
         $matches = $this->fetchLiveMatches();
 

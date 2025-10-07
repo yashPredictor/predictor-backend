@@ -22,7 +22,7 @@ class SyncScorecardJob implements ShouldQueue
     private const CRON_KEY = 'scorecards';
     private const SCORECARD_STALE_AFTER_MS = 60_000;
     private const MATCHES_COLLECTION = 'matches';
-    private const SCORECARDS_COLLECTION = 'scorecard';
+    private const SCORECARDS_COLLECTION = 'scorecards';
 
     public int $timeout = 600;
 

@@ -2,19 +2,20 @@
 
 namespace App\Jobs;
 
+use Throwable;
+use Illuminate\Bus\Queueable;
+use Illuminate\Http\Client\Pool;
+use App\Support\Logging\ApiLogging;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Http;
 use App\Services\AdminSettingsService;
 use App\Services\MatchOversSyncLogger;
-use App\Support\Logging\ApiLogging;
-use App\Support\Queue\Middleware\RespectPauseWindow;
+use Illuminate\Queue\SerializesModels;
+use Illuminate\Queue\InteractsWithQueue;
 use Google\Cloud\Firestore\FirestoreClient;
-use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
-use Illuminate\Http\Client\Pool;
-use Illuminate\Queue\InteractsWithQueue;
-use Illuminate\Queue\SerializesModels;
-use Illuminate\Support\Facades\Http;
-use Throwable;
+use App\Support\Queue\Middleware\RespectPauseWindow;
 
 class SyncMatchOversJob implements ShouldQueue
 {
@@ -239,7 +240,7 @@ class SyncMatchOversJob implements ShouldQueue
                         $bulk->set($matchesRef, [
                             'state' => $payload['oversData']['matchheaders']['state'],
                             'status' => $payload['oversData']['matchheaders']['status'],
-                            'state_lowercase' => strtolower($payload['oversData']['matchheaders']['state']),
+                                                        'state_lowercase' => strtolower($payload['oversData']['matchheaders']['state']),
                         ], ['merge' => true]);
                     }
 

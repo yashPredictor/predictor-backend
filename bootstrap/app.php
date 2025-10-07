@@ -35,10 +35,10 @@ return Application::configure(basePath: dirname(__DIR__))
             ->withoutOverlapping()
             ->when($shouldRun);
 
-        $schedule->job(new SyncSeriesDataJob())
-            ->cron('0 11 */3 * *') 
-            ->withoutOverlapping()
-            ->when($shouldRun);
+        // $schedule->job(new SyncSeriesDataJob())
+        //     ->cron('0 11 */3 * *') 
+        //     ->withoutOverlapping()
+        //     ->when($shouldRun);
 
         $schedule->job(new SyncScorecardJob())
             ->everyThreeMinutes()

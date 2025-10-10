@@ -1,5 +1,6 @@
 <?php
 
+use App\Console\Commands\SyncCommentary;
 use App\Jobs\SyncLiveMatchesJob;
 use App\Jobs\SyncMatchOversJob;
 use App\Jobs\SyncScorecardJob;
@@ -7,6 +8,7 @@ use App\Jobs\MoveEndedMatchesToRecentJob;
 use App\Jobs\SyncSeriesDataJob;
 use App\Jobs\SyncSeriesSquadJob;
 use App\Jobs\SyncSquadJob;
+use App\Jobs\SyncSquadsPlayingXIIJob;
 use App\Services\PauseWindowService;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Application;
@@ -26,7 +28,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $shouldRun = static fn(): bool => !app(PauseWindowService::class)->isPaused();
 
         $schedule->job(new SyncLiveMatchesJob())
-            ->everyTwoMinutes()
+            ->everyThreeMinutes()
             ->withoutOverlapping()
             ->when($shouldRun);
 
@@ -35,30 +37,35 @@ return Application::configure(basePath: dirname(__DIR__))
             ->withoutOverlapping()
             ->when($shouldRun);
 
-        // $schedule->job(new SyncSeriesDataJob())
-        //     ->cron('0 11 */3 * *') 
-        //     ->withoutOverlapping()
-        //     ->when($shouldRun);
+        $schedule->job(new SyncSeriesDataJob())
+            ->cron('0 11 */3 * *') 
+            ->withoutOverlapping()
+            ->when($shouldRun);
 
         $schedule->job(new SyncScorecardJob())
             ->everyThreeMinutes()
             ->withoutOverlapping()
             ->when($shouldRun);
 
-        // $schedule->job(new SyncSquadJob())
-        //     ->dailyAt('06:00')
-        //     ->withoutOverlapping()
-        //     ->when($shouldRun);
-    
-        $schedule->job(new SyncSeriesSquadJob())
-            ->dailyAt('11:00')
+        $schedule->job(new SyncCommentary())
+            ->everyThreeMinutes()
             ->withoutOverlapping()
             ->when($shouldRun);
 
-        $schedule->job(new MoveEndedMatchesToRecentJob())
+        $schedule->job(new SyncSquadJob())
+            ->hourly()
+            ->withoutOverlapping()
+            ->when($shouldRun);
+    
+        $schedule->job(new SyncSquadsPlayingXIIJob())
             ->everyMinute()
             ->withoutOverlapping()
             ->when($shouldRun);
+
+        // $schedule->job(new MoveEndedMatchesToRecentJob())
+        //     ->everyMinute()
+        //     ->withoutOverlapping()
+        //     ->when($shouldRun);
 
         $schedule->command('logs:cleanup')
             ->dailyAt('05:30')

@@ -3,7 +3,7 @@
 namespace App\Jobs;
 
 use App\Services\AdminSettingsService;
-use App\Services\SquadSyncLogger;
+use App\Services\SquadSyncPlayingXIILogger;
 use App\Support\Logging\ApiLogging;
 use App\Support\Queue\Middleware\RespectPauseWindow;
 use Google\Cloud\Firestore\DocumentSnapshot;
@@ -14,16 +14,14 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Log;
 use Throwable;
 
-class SyncSquadJob implements ShouldQueue
+class SyncSquadsPlayingXIIJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels, ApiLogging;
 
-    private const SQUAD_STALE_AFTER_MS = 600_000;
-    private const ALLOWED_STATES = ['preview', 'upcoming'];
-    private const CRON_KEY = 'squads';
+    private const ALLOWED_STATES = ["toss", "toss delay"];
+    private const CRON_KEY = 'squads_playing_xii';
     private const MATCHES_COLLECTION = 'matches';
     private const SQUADS_COLLECTION = 'squads';
     public int $timeout = 600;
@@ -34,7 +32,7 @@ class SyncSquadJob implements ShouldQueue
     private string $baseUrl;
     private string $matchesCollection;
     private string $squadsCollection;
-    private SquadSyncLogger $logger;
+    private SquadSyncPlayingXIILogger $logger;
     private array $firestoreSettings = [];
     private array $cricbuzzSettings = [];
     private array $targetMatchIds = [];
@@ -63,10 +61,10 @@ class SyncSquadJob implements ShouldQueue
         $this->matchesCollection = self::MATCHES_COLLECTION;
         $this->squadsCollection = self::SQUADS_COLLECTION;
 
-        $this->logger = new SquadSyncLogger($this->runId);
+        $this->logger = new SquadSyncPlayingXIILogger($this->runId);
         $this->runId = $this->logger->runId;
 
-        $this->log('job_started', 'info', 'SyncSquad job started', [
+        $this->log('job_started', 'info', 'SyncSquadsPlayingXII job started', [
             'requested_match_ids' => $this->matchIds,
             'timeout' => $this->timeout,
             'tries' => $this->tries,
@@ -97,10 +95,10 @@ class SyncSquadJob implements ShouldQueue
         }
 
         $this->targetMatchIds = $this->resolveMatchIds();
-        
+
         if (empty($this->targetMatchIds)) {
             $apiSummary = $this->getApiCallBreakdown();
-            $this->log('no_matches', 'warning', 'No upcoming matches found for squad sync', [
+            $this->log('no_matches', 'warning', 'No toss-phase matches starting within the next hour found for squad sync', [
                 'requested_ids' => $this->matchIds,
                 'api_calls' => $apiSummary,
             ]);
@@ -144,35 +142,24 @@ class SyncSquadJob implements ShouldQueue
             ->collection($this->squadsCollection)
             ->document($matchId);
 
-        $snapshot = null;
-        $shouldRefresh = true;
-
         try {
             $snapshot = $docRef->snapshot();
             if ($snapshot->exists()) {
                 $existing = $snapshot->data();
-                $lastFetched = (int) ($existing['lastFetched'] ?? 0);
-                $hasPlayers = !empty(data_get($existing, 'squads.team1.players'))
-                    && !empty(data_get($existing, 'squads.team2.players'));
+                $team1Empty = $this->playingXiIsEmpty($existing, 'team1');
+                $team2Empty = $this->playingXiIsEmpty($existing, 'team2');
 
-                if ($hasPlayers) {
-                    $ageMs = now()->valueOf() - $lastFetched;
-                    if ($lastFetched > 0 && $ageMs < self::SQUAD_STALE_AFTER_MS) {
-                        $shouldRefresh = false;
-                    }
+                if (!$team1Empty && !$team2Empty) {
+                    $this->log('squads_playing_xi_cached', 'info', 'Skipping squads fetch; playing XI already populated', [
+                        'match_id' => $matchId,
+                    ]);
+                    return false;
                 }
             }
         } catch (Throwable $e) {
             $this->log('squads_snapshot_failed', 'warning', 'Failed to read existing squad snapshot', $this->exceptionContext($e, [
                 'match_id' => $matchId,
             ]));
-        }
-
-        if (!$shouldRefresh) {
-            $this->log('squads_cached', 'info', 'Squads considered fresh; skipping fetch', [
-                'match_id' => $matchId,
-            ]);
-            return false;
         }
 
         $url = $this->baseUrl . $matchId . '/teams';
@@ -269,10 +256,10 @@ class SyncSquadJob implements ShouldQueue
     {
         $now = now();
         $windowStart = $now->copy()->valueOf();
-        $windowEnd = $now->copy()->addDay()->valueOf();
+        $windowEnd = $now->copy()->addHour()->valueOf();
 
         if (!empty($this->matchIds)) {
-            return $this->filterMatchIdsByWindow(
+            return $this->filterMatchIdsByStateAndWindow(
                 array_values(array_unique(array_map(static fn($id) => (string) $id, $this->matchIds))),
                 $windowStart,
                 $windowEnd
@@ -283,7 +270,7 @@ class SyncSquadJob implements ShouldQueue
             return [];
         }
 
-        $this->log('match_ids_discovery', 'info', 'Discovering upcoming match IDs from Firestore', [
+        $this->log('match_ids_discovery', 'info', 'Discovering toss-phase matches from Firestore', [
             'window_start' => $windowStart,
             'window_end' => $windowEnd,
         ]);
@@ -291,12 +278,13 @@ class SyncSquadJob implements ShouldQueue
         try {
             $query = $this->firestore
                 ->collection($this->matchesCollection)
+                ->where('matchInfo.state_lowercase', 'in', self::ALLOWED_STATES)
                 ->where('matchInfo.startdate', '>=', $windowStart)
                 ->where('matchInfo.startdate', '<=', $windowEnd);
 
             $documents = $query->documents();
         } catch (Throwable $e) {
-            $this->log('match_id_query_failed', 'error', 'Failed to query upcoming matches from Firestore', $this->exceptionContext($e));
+            $this->log('match_id_query_failed', 'error', 'Failed to query toss-phase matches from Firestore', $this->exceptionContext($e));
             return [];
         }
 
@@ -307,21 +295,21 @@ class SyncSquadJob implements ShouldQueue
             }
 
             $data = $snapshot->data();
-            if (!$this->isStateAllowed($data)) {
+            if (!$this->isStartWithinWindow($data, $windowStart, $windowEnd)) {
                 continue;
             }
 
-            if (!$this->isStartTimeWithinWindow($data, $windowStart, $windowEnd)) {
-                continue;
-            }
-
-            $ids[] = (int) $snapshot->id();
+            $ids[] = (string) $snapshot->id();
         }
 
         return array_values(array_unique($ids));
     }
 
-    private function filterMatchIdsByWindow(array $matchIds, int $windowStart, int $windowEnd): array
+    /**
+     * @param array<int, string> $matchIds
+     * @return array<int, string>
+     */
+    private function filterMatchIdsByStateAndWindow(array $matchIds, int $windowStart, int $windowEnd): array
     {
         if (!$this->firestore || empty($matchIds)) {
             return [];
@@ -359,8 +347,8 @@ class SyncSquadJob implements ShouldQueue
                 continue;
             }
 
-            if (!$this->isStartTimeWithinWindow($data, $windowStart, $windowEnd)) {
-                $this->log('match_skipped_time', 'info', 'Skipping match for squad sync due to start time window', [
+            if (!$this->isStartWithinWindow($data, $windowStart, $windowEnd)) {
+                $this->log('match_skipped_window', 'info', 'Skipping match for squad sync due to start window filter', [
                     'match_id' => $matchId,
                     'start' => data_get($data, 'matchInfo.startdate'),
                     'window_start' => $windowStart,
@@ -382,7 +370,7 @@ class SyncSquadJob implements ShouldQueue
         return in_array($state, self::ALLOWED_STATES, true);
     }
 
-    private function isStartTimeWithinWindow(array $data, int $windowStart, int $windowEnd): bool
+    private function isStartWithinWindow(array $data, int $windowStart, int $windowEnd): bool
     {
         $startDate = data_get($data, 'matchInfo.startdate');
 
@@ -395,11 +383,40 @@ class SyncSquadJob implements ShouldQueue
         return $startDate >= $windowStart && $startDate <= $windowEnd;
     }
 
+    private function playingXiIsEmpty(array $document, string $teamKey): bool
+    {
+        $players = data_get($document, "squads.{$teamKey}.players");
+
+        if (!is_array($players)) {
+            return true;
+        }
+
+        $candidateKeys = ['playingXI', 'playing XI', 'playing_xi', 'playing xi'];
+        $playingXi = null;
+
+        foreach ($candidateKeys as $candidate) {
+            if (array_key_exists($candidate, $players)) {
+                $playingXi = $players[$candidate];
+                break;
+            }
+        }
+
+        if ($playingXi === null) {
+            return true;
+        }
+
+        if (is_array($playingXi)) {
+            return empty(array_filter($playingXi, static fn($entry) => !empty($entry)));
+        }
+
+        return empty($playingXi);
+    }
+
     private function finalize(string $status): void
     {
         $apiSummary = $this->getApiCallBreakdown();
 
-        $this->log('job_completed', $status, 'SyncSquad job finished', [
+        $this->log('job_completed', $status, 'SyncSquadsPlayingXII job finished', [
             'matches_considered' => count($this->targetMatchIds),
             'squads_synced' => $this->squadsSynced,
             'squads_skipped' => $this->squadsSkipped,

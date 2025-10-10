@@ -3,11 +3,13 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\CommentarySyncLog;
 use App\Models\LiveMatchSyncLog;
 use App\Models\MatchOversSyncLog;
 use App\Models\RecentMatchStatusLog;
 use App\Models\SeriesSyncLog;
 use App\Models\SeriesSquadSyncLog;
+use App\Models\SquadSyncPlayingXIILog;
 use App\Models\ScorecardSyncLog;
 use App\Models\SquadSyncLog;
 use App\Services\AdminSettingsService;
@@ -46,11 +48,23 @@ class CronDashboardController extends Controller
             'accent'      => 'cyan',
             'model'       => ScorecardSyncLog::class,
         ],
+        'commentary' => [
+            'label'       => 'Commentary Sync',
+            'description' => 'Captures ball-by-ball commentary for active innings.',
+            'accent'      => 'fuchsia',
+            'model'       => CommentarySyncLog::class,
+        ],
         'squads' => [
             'label'       => 'Squad Sync',
             'description' => 'Preloads squad lists ahead of upcoming matches.',
             'accent'      => 'amber',
             'model'       => SquadSyncLog::class,
+        ],
+        'squads_playing_xii' => [
+            'label'       => 'Playing XI Sync',
+            'description' => 'Refreshes squads once toss updates are available.',
+            'accent'      => 'teal',
+            'model'       => SquadSyncPlayingXIILog::class,
         ],
         'series-squads' => [
             'label'       => 'Series Squad Sync',

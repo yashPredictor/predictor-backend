@@ -17,6 +17,8 @@
         'cyan' => 'rgba(6, 182, 212, 0.6)',
         'violet' => 'rgba(139, 92, 246, 0.6)',
         'slate' => 'rgba(100, 116, 139, 0.6)',
+        'teal' => 'rgba(20, 184, 166, 0.6)',
+        'fuchsia' => 'rgba(217, 70, 239, 0.6)',
     ];
 
     $aggregateIssues = collect($summaries)

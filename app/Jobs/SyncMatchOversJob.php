@@ -196,7 +196,6 @@ class SyncMatchOversJob implements ShouldQueue
                 }
 
                 try {
-                    $matchesRef = $this->firestore->collection('matches')->document($matchId);
                     $docRef = $this->firestore->collection('matchOvers')->document($matchId);
                     $apiUpdatedAt = (int) ($oversData['responselastupdated']
                         ?? ($oversData['miniscore']['responselastupdated'] ?? 0));
@@ -235,14 +234,6 @@ class SyncMatchOversJob implements ShouldQueue
                     ];
 
                     $bulk->set($docRef, $payload, ['merge' => true]);
-
-                    if(!empty($payload['oversData']['matchheaders']['state']) && !empty($payload['oversData']['matchheaders']['status'])) {
-                        $bulk->set($matchesRef, [
-                            'state' => $payload['oversData']['matchheaders']['state'],
-                            'status' => $payload['oversData']['matchheaders']['status'],
-                                                        'state_lowercase' => strtolower($payload['oversData']['matchheaders']['state']),
-                        ], ['merge' => true]);
-                    }
 
                     $synced++;
                     $this->log('overs_synced', 'success', 'Stored overs in Firestore', [

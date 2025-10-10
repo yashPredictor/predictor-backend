@@ -84,7 +84,6 @@ class SyncLiveMatchesJob implements ShouldQueue
             $this->log('initialize_clients', 'success', 'Firestore client initialised');
         } catch (Throwable $e) {
             $this->log('initialize_clients', 'error', 'Failed to initialise Firestore client', $this->exceptionContext($e));
-
             throw $e;
         }
 
@@ -139,32 +138,32 @@ class SyncLiveMatchesJob implements ShouldQueue
             'match_ids' => array_map(static fn($match) => $match['matchInfo']['matchId'] ?? null, $matches),
         ]);
 
-        $matches = $this->filterMatchesByStartWindow($matches);
+        // $matches = $this->filterMatchesByStartWindow($matches);
 
-        if (empty($matches)) {
-            $windowStart = now()->copy()->subMinutes(15);
-            $windowEnd = now()->copy()->addMinutes(35);
+        // if (empty($matches)) {
+        //     $windowStart = now()->copy()->subMinutes(15);
+        //     $windowEnd = now()->copy()->addMinutes(35);
 
-            $this->log('live_matches_window_empty', 'info', 'Matches from API did not fall within the start time window', [
-                'window_start' => $windowStart->toIso8601String(),
-                'window_end' => $windowEnd->toIso8601String(),
-                'candidate_matches' => $this->candidateMatchIds,
-            ]);
+        //     $this->log('live_matches_window_empty', 'info', 'Matches from API did not fall within the start time window', [
+        //         'window_start' => $windowStart->toIso8601String(),
+        //         'window_end' => $windowEnd->toIso8601String(),
+        //         'candidate_matches' => $this->candidateMatchIds,
+        //     ]);
 
-            $apiSummary = $this->getApiCallBreakdown();
-            $this->log('job_completed', 'info', 'SyncLiveMatches job finished (window filter)', [
-                'synced' => 0,
-                'skipped' => 0,
-                'failures' => [],
-                'api_calls' => $apiSummary,
-            ]);
+        //     $apiSummary = $this->getApiCallBreakdown();
+        //     $this->log('job_completed', 'info', 'SyncLiveMatches job finished (window filter)', [
+        //         'synced' => 0,
+        //         'skipped' => 0,
+        //         'failures' => [],
+        //         'api_calls' => $apiSummary,
+        //     ]);
 
-            return;
-        }
+        //     return;
+        // }
 
         $this->log('live_matches_filtered', 'info', 'Matches retained after window filter', [
             'filtered_count' => count($matches),
-            'candidate_ids' => $this->candidateMatchIds,
+            // 'candidate_ids' => $this->candidateMatchIds,
         ]);
 
         $bulk = $this->firestore->bulkWriter([

@@ -3,7 +3,9 @@
 namespace App\Console\Commands;
 
 use App\Jobs\SyncSeriesDataJob;
+use App\Services\AdminSettingsService;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 class SyncSeriesData extends Command
@@ -16,8 +18,17 @@ class SyncSeriesData extends Command
      */
     private function normalizeOptionValues(string $optionName): array
     {
-        $raw = $this->option($optionName);
-        $values = is_array($raw) ? $raw : ($raw === null ? [] : [$raw]);
+        $raw = null;
+
+        if ($this->input !== null) {
+            $raw = $this->input->getOption($optionName);
+        }
+
+        if ($raw === null) {
+            return [];
+        }
+
+        $values = is_array($raw) ? $raw : [$raw];
 
         $normalized = [];
 
@@ -51,12 +62,35 @@ class SyncSeriesData extends Command
         $seriesIds = $this->normalizeOptionValues('seriesId');
         $matchIds  = $this->normalizeOptionValues('matchId');
 
+        /** @var AdminSettingsService $settings */
+        $settings = app(AdminSettingsService::class);
+
+        if (!$settings->isCronEnabled(SyncSeriesDataJob::CRON_KEY)) {
+            $message = 'Series sync skipped because the cron is paused via emergency controls.';
+            if ($this->output !== null) {
+                $this->warn($message);
+            }
+            Log::warning('SYNC-SERIES: ' . $message, [
+                'series_ids' => $seriesIds,
+                'match_ids' => $matchIds,
+            ]);
+            return self::SUCCESS;
+        }
+
         $runId = (string) Str::uuid();
         SyncSeriesDataJob::dispatch($seriesIds, $matchIds, $runId);
 
-        $this->info("Series sync job queued. Run ID: {$runId}");
+        if ($this->output !== null) {
+            $this->info("Series sync job queued. Run ID: {$runId}");
+        }
 
-        return 0;
+        Log::info('SYNC-SERIES: Series sync job queued', [
+            'run_id' => $runId,
+            'series_ids' => $seriesIds,
+            'match_ids' => $matchIds,
+        ]);
+
+        return self::SUCCESS;
     }
 
 }

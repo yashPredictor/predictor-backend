@@ -20,12 +20,12 @@ class SyncSeriesDataJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels, ApiLogging;
 
-    private const CRON_KEY = 'series';
-    private const SERIES_ENDPOINT     = 'series/v1/';
+    public const CRON_KEY = 'series';
+    private const SERIES_ENDPOINT = 'series/v1/';
 
-    private const MATCH_CENTER_PATH   = 'mcenter/v1/';
+    private const MATCH_CENTER_PATH = 'mcenter/v1/';
 
-    private const MATCHES_COLLECTION  = 'matches';
+    private const MATCHES_COLLECTION = 'matches';
 
     private ?FirestoreClient $firestore = null;
 
@@ -37,7 +37,7 @@ class SyncSeriesDataJob implements ShouldQueue
 
     private array $firestoreSettings = [];
 
-    private array $cricbuzzSettings  = [];
+    private array $cricbuzzSettings = [];
 
     private string $seriesBaseUrl;
 
@@ -55,14 +55,15 @@ class SyncSeriesDataJob implements ShouldQueue
     private array $failures = [];
 
     public int $timeout = 3600;
-    
+
     public int $tries = 5;
 
     public function __construct(
         private readonly array $seriesIds = [],
         private readonly array $matchIds = [],
         private ?string $runId = null,
-    ) {}
+    ) {
+    }
 
     /**
      * @return string[]
@@ -74,27 +75,26 @@ class SyncSeriesDataJob implements ShouldQueue
 
     public function handle(): void
     {
-        $this->apiHost = config('services.cricbuzz.host', 'cricbuzz-cricket2.p.rapidapi.com');
-        $this->logger  = new SeriesSyncLogger($this->runId);
-        $this->runId   = $this->logger->runId;
-
-        $this->logger->log('job_started', 'info', 'SyncSeriesData job started', [
-            'seriesIds' => $this->seriesIds,
-            'matchIds'  => $this->matchIds,
-        ]);
-
-        $settingsService         = app(AdminSettingsService::class);
+        $settingsService = app(AdminSettingsService::class);
 
         if (!$settingsService->isCronEnabled(self::CRON_KEY)) {
-            $this->logger->log('job_disabled', 'warning', 'Series sync job paused via emergency controls.');
             return;
         }
 
-        $this->firestoreSettings = $settingsService->firestoreSettings();
-        $this->cricbuzzSettings  = $settingsService->cricbuzzSettings();
+        $this->apiHost = config('services.cricbuzz.host', 'cricbuzz-cricket2.p.rapidapi.com');
+        $this->logger = new SeriesSyncLogger($this->runId);
+        $this->runId = $this->logger->runId;
 
-        $this->apiHost            = $this->cricbuzzSettings['host'] ?? $this->apiHost;
-        $this->seriesBaseUrl      = sprintf('https://%s/%s', $this->apiHost, self::SERIES_ENDPOINT);
+        $this->logger->log('job_started', 'info', 'SyncSeriesData job started', [
+            'seriesIds' => $this->seriesIds,
+            'matchIds' => $this->matchIds,
+        ]);
+
+        $this->firestoreSettings = $settingsService->firestoreSettings();
+        $this->cricbuzzSettings = $settingsService->cricbuzzSettings();
+
+        $this->apiHost = $this->cricbuzzSettings['host'] ?? $this->apiHost;
+        $this->seriesBaseUrl = sprintf('https://%s/%s', $this->apiHost, self::SERIES_ENDPOINT);
         $this->matchCenterBaseUrl = sprintf('https://%s/%s', $this->apiHost, self::MATCH_CENTER_PATH);
 
         try {
@@ -106,8 +106,8 @@ class SyncSeriesDataJob implements ShouldQueue
         }
 
         $seriesIdsForProcessing = array_values(array_unique($this->seriesIds));
-        $matchIdsForProcessing  = array_values(array_unique($this->matchIds));
-        $metadataRef            = $this->firestore->collection('seriesMetadata')->document('seriesMetadata');
+        $matchIdsForProcessing = array_values(array_unique($this->matchIds));
+        $metadataRef = $this->firestore->collection('seriesMetadata')->document('seriesMetadata');
 
         if (!empty($matchIdsForProcessing)) {
             $seriesIdsForProcessing = $this->augmentSeriesIdsFromMatches(
@@ -130,7 +130,7 @@ class SyncSeriesDataJob implements ShouldQueue
             try {
                 $metadataRef->set([
                     'lastMatchesFetched' => now()->valueOf(),
-                    'matchCount'         => $matchesSynced,
+                    'matchCount' => $matchesSynced,
                 ], ['merge' => true]);
                 $this->logger->log('metadata_update', 'success', 'Updated matches metadata', [
                     'matchesSynced' => $matchesSynced,
@@ -147,11 +147,11 @@ class SyncSeriesDataJob implements ShouldQueue
 
     private function initializeClients(): FirestoreClient
     {
-        $keyPath   = $this->firestoreSettings['sa_json'] ?? config('services.firestore.sa_json');
+        $keyPath = $this->firestoreSettings['sa_json'] ?? config('services.firestore.sa_json');
         $projectId = $this->firestoreSettings['project_id'] ?? config('services.firestore.project_id');
 
         if (!$projectId && $keyPath && is_file($keyPath)) {
-            $json      = json_decode(file_get_contents($keyPath), true);
+            $json = json_decode(file_get_contents($keyPath), true);
             $projectId = $json['project_id'] ?? null;
         }
 
@@ -203,7 +203,7 @@ class SyncSeriesDataJob implements ShouldQueue
             $seriesFromMatch = $matchSnapshot->data()['seriesId'] ?? null;
             if ($seriesFromMatch === null || $seriesFromMatch === '') {
                 $this->recordFailure('series_lookup', "Series ID missing for match {$matchId}", [
-                    'match_id'      => $matchId,
+                    'match_id' => $matchId,
                     'match_payload' => $matchSnapshot->data(),
                 ]);
                 continue;
@@ -221,13 +221,13 @@ class SyncSeriesDataJob implements ShouldQueue
      */
     private function syncSeries(array $seriesIdsForProcessing, array $matchIdsForProcessing, $metadataRef): void
     {
-        $seriesTypes      = ['international', 'league', 'domestic', 'women'];
-        $seriesTargetSet  = !empty($seriesIdsForProcessing) ? array_fill_keys($seriesIdsForProcessing, false) : null;
-        $processedSeries  = [];
-        $bulk             = $this->firestore->bulkWriter([
-            'maxBatchSize'        => 100,
+        $seriesTypes = ['international', 'league', 'domestic', 'women'];
+        $seriesTargetSet = !empty($seriesIdsForProcessing) ? array_fill_keys($seriesIdsForProcessing, false) : null;
+        $processedSeries = [];
+        $bulk = $this->firestore->bulkWriter([
+            'maxBatchSize' => 100,
             'initialOpsPerSecond' => 20,
-            'maxOpsPerSecond'     => 60,
+            'maxOpsPerSecond' => 60,
         ]);
 
         foreach ($seriesTypes as $type) {
@@ -240,7 +240,7 @@ class SyncSeriesDataJob implements ShouldQueue
             if (!$response->successful() || !isset($json['seriesMapProto'])) {
                 $this->recordFailure('series_fetch', "Invalid response for series type {$type}", $this->responseContext($response, [
                     'series_type' => $type,
-                    'url'         => $this->seriesBaseUrl . $type,
+                    'url' => $this->seriesBaseUrl . $type,
                 ]), null, 'warning');
                 continue;
             }
@@ -249,7 +249,7 @@ class SyncSeriesDataJob implements ShouldQueue
                 $seriesDataRef = $this->firestore->collection('seriesData')->document($type);
                 $bulk->set($seriesDataRef, $json);
                 $this->logger->log('series_data_store', 'success', "Stored series data block {$type}", [
-                    'series_type'              => $type,
+                    'series_type' => $type,
                     'series_map_proto_segments' => is_array($json['seriesMapProto'] ?? null)
                         ? count($json['seriesMapProto'])
                         : 0,
@@ -270,7 +270,7 @@ class SyncSeriesDataJob implements ShouldQueue
                     if ($sid === '') {
                         $this->recordFailure('series_store', 'Encountered series without ID', [
                             'series_payload' => $series,
-                            'series_type'    => $type,
+                            'series_type' => $type,
                         ]);
                         $this->seriesFailed++;
                         continue;
@@ -287,17 +287,17 @@ class SyncSeriesDataJob implements ShouldQueue
                     try {
                         $seriesRef = $this->firestore->collection('series')->document($sid);
                         $seriesWithCategory = array_merge($series, [
-                            'id'               => $sid,
-                            'category'         => $type,
+                            'id' => $sid,
+                            'category' => $type,
                             'startDtTimestamp' => isset($series['startDt']) ? (int) $series['startDt'] : null,
-                            'endDtTimestamp'   => isset($series['endDt']) ? (int) $series['endDt'] : null,
+                            'endDtTimestamp' => isset($series['endDt']) ? (int) $series['endDt'] : null,
                         ]);
 
                         $bulk->set($seriesRef, $seriesWithCategory, ['merge' => true]);
                         $this->seriesStored++;
                         $processedSeries[$sid] = true;
                         $this->logger->log('series_store', 'success', "Stored series {$sid}", [
-                            'category'       => $type,
+                            'category' => $type,
                             'series_payload' => $seriesWithCategory,
                         ]);
 
@@ -312,7 +312,7 @@ class SyncSeriesDataJob implements ShouldQueue
                         $this->seriesFailed++;
                         $this->recordFailure('series_store', "Failed to store series {$sid}", [
                             'series_payload' => $seriesWithCategory,
-                            'series_type'    => $type,
+                            'series_type' => $type,
                         ], $e);
                     }
                 }
@@ -357,13 +357,13 @@ class SyncSeriesDataJob implements ShouldQueue
         $seriesDocs = $this->firestore->collection('series')->documents();
 
         $bulk = $this->firestore->bulkWriter([
-            'maxBatchSize'        => 100,
+            'maxBatchSize' => 100,
             'initialOpsPerSecond' => 20,
-            'maxOpsPerSecond'     => 60,
+            'maxOpsPerSecond' => 60,
         ]);
 
         $seriesFilterSet = !empty($seriesIdFilters) ? array_fill_keys($seriesIdFilters, false) : null;
-        $matchFilterSet  = !empty($matchIdFilters) ? array_fill_keys($matchIdFilters, false) : null;
+        $matchFilterSet = !empty($matchIdFilters) ? array_fill_keys($matchIdFilters, false) : null;
 
         $seenMatchIds = [];
 
@@ -373,8 +373,8 @@ class SyncSeriesDataJob implements ShouldQueue
             }
 
             $seriesData = $seriesDoc->data();
-            $seriesId   = (string) ($seriesData['id'] ?? $seriesDoc->id());
-            $category   = $seriesData['category'] ?? null;
+            $seriesId = (string) ($seriesData['id'] ?? $seriesDoc->id());
+            $category = $seriesData['category'] ?? null;
 
             if ($seriesFilterSet !== null && !array_key_exists($seriesId, $seriesFilterSet)) {
                 continue;
@@ -393,7 +393,7 @@ class SyncSeriesDataJob implements ShouldQueue
             if (!$response->successful() || !isset($json['matchDetails'])) {
                 $this->recordFailure('match_fetch', "Invalid response for series {$seriesId}", $this->responseContext($response, [
                     'series_id' => $seriesId,
-                    'category'  => $category,
+                    'category' => $category,
                 ]), null, 'warning');
                 continue;
             }
@@ -404,7 +404,7 @@ class SyncSeriesDataJob implements ShouldQueue
                 }
 
                 foreach ($detail['matchDetailsMap']['match'] as $match) {
-                    $matchInfo         = Arr::get($match, 'matchInfo');
+                    $matchInfo = Arr::get($match, 'matchInfo');
                     $originalMatchInfo = is_array($matchInfo) ? $matchInfo : [];
 
                     if (!is_array($matchInfo)) {
@@ -414,8 +414,8 @@ class SyncSeriesDataJob implements ShouldQueue
                     $matchId = $matchInfo['matchId'] ?? '';
                     if ($matchId === '') {
                         $this->recordFailure('match_store', 'Encountered match without ID', [
-                            'series_id'     => $seriesId,
-                            'category'      => $category,
+                            'series_id' => $seriesId,
+                            'category' => $category,
                             'match_payload' => $match,
                         ]);
                         $this->matchesFailed++;
@@ -439,28 +439,28 @@ class SyncSeriesDataJob implements ShouldQueue
                     if (is_array($matchCenter) && !empty($matchCenter)) {
                         $this->logger->log('match_center_enriched', 'info', "Enriched match {$matchId} with mcenter payload", [
                             'series_id' => $seriesId,
-                            'category'  => $category,
+                            'category' => $category,
                         ]);
                         $matchInfo = $matchCenter;
                     } else {
                         $this->logger->log('match_center_fallback', 'info', "Using original matchInfo for match {$matchId}", [
                             'series_id' => $seriesId,
-                            'category'  => $category,
+                            'category' => $category,
                         ]);
                     }
 
-                    $state     = $this->resolveMatchState($matchInfo, $originalMatchInfo);
+                    $state = $this->resolveMatchState($matchInfo, $originalMatchInfo);
                     $startDate = $this->resolveMatchTimestamp($matchInfo, $originalMatchInfo, 'start');
-                    $endDate   = $this->resolveMatchTimestamp($matchInfo, $originalMatchInfo, 'end') ?? $startDate;
+                    $endDate = $this->resolveMatchTimestamp($matchInfo, $originalMatchInfo, 'end') ?? $startDate;
 
                     try {
                         $matchWithMeta = array_merge($match, [
-                            'category'  => $category,
-                            'seriesId'  => (int) $seriesId,
+                            'category' => $category,
+                            'seriesId' => (int) $seriesId,
                             'matchInfo' => array_merge($matchInfo, [
                                 'state_lowercase' => $state !== null ? strtolower($state) : null,
-                                'startdate'       => $startDate,
-                                'enddate'         => $endDate,
+                                'startdate' => $startDate,
+                                'enddate' => $endDate,
                             ]),
                             'updatedAt' => now()->getTimestamp() * 1000,
                         ]);
@@ -469,15 +469,15 @@ class SyncSeriesDataJob implements ShouldQueue
                         $bulk->set($matchRef, $matchWithMeta, ['merge' => true]);
                         $this->matchesStored++;
                         $this->logger->log('match_store', 'success', "Stored match {$matchId}", [
-                            'series_id'    => $seriesId,
-                            'category'     => $category,
-                            'match_payload'=> $matchWithMeta,
+                            'series_id' => $seriesId,
+                            'category' => $category,
+                            'match_payload' => $matchWithMeta,
                         ]);
                     } catch (Throwable $e) {
                         $this->matchesFailed++;
                         $this->recordFailure('match_store', "Failed to store match {$matchId}", [
-                            'series_id'     => $seriesId,
-                            'category'      => $category,
+                            'series_id' => $seriesId,
+                            'category' => $category,
                             'match_payload' => $match,
                         ], $e);
                     }
@@ -524,7 +524,7 @@ class SyncSeriesDataJob implements ShouldQueue
         if (!is_array($payload) || empty($payload)) {
             $this->logger->log('match_center_invalid', 'warning', 'Match center API returned empty payload', [
                 'match_id' => $matchId,
-                'url'      => $url,
+                'url' => $url,
             ]);
             return null;
         }
@@ -608,12 +608,12 @@ class SyncSeriesDataJob implements ShouldQueue
 
             $response = Http::withHeaders([
                 'x-rapidapi-host' => $this->apiHost,
-                'x-rapidapi-key'  => $this->apiKey,
+                'x-rapidapi-key' => $this->apiKey,
             ])->get($url);
 
             $context = $this->responseContext($response, [
                 'action' => $action,
-                'url'    => $url,
+                'url' => $url,
             ]);
 
             if (!$response->successful()) {
@@ -627,7 +627,7 @@ class SyncSeriesDataJob implements ShouldQueue
         } catch (Throwable $e) {
             $context = $this->exceptionContext($e, [
                 'action' => $action,
-                'url'    => $url,
+                'url' => $url,
             ]);
             $this->recordFailure('api_call', "GET {$url} threw an exception", $context, $e);
 
@@ -644,7 +644,7 @@ class SyncSeriesDataJob implements ShouldQueue
         $context = array_merge(['action' => $action], $context);
 
         $this->failures[] = [
-            'action'  => $action,
+            'action' => $action,
             'message' => $message,
             'context' => $context,
         ];
@@ -657,14 +657,14 @@ class SyncSeriesDataJob implements ShouldQueue
         $apiCallSummary = $this->getApiCallBreakdown();
 
         $this->logger->log('job_finished', $status, 'SyncSeriesData job completed', [
-            'apiCalls'       => $apiCallSummary['total'],
+            'apiCalls' => $apiCallSummary['total'],
             'apiCallBreakdown' => $apiCallSummary['breakdown'],
-            'seriesStored'   => $this->seriesStored,
-            'seriesFailed'   => $this->seriesFailed,
-            'matchesStored'  => $this->matchesStored,
-            'matchesFailed'  => $this->matchesFailed,
-            'failures'       => $this->failures,
-            'runId'          => $this->runId,
+            'seriesStored' => $this->seriesStored,
+            'seriesFailed' => $this->seriesFailed,
+            'matchesStored' => $this->matchesStored,
+            'matchesFailed' => $this->matchesFailed,
+            'failures' => $this->failures,
+            'runId' => $this->runId,
         ]);
     }
 }

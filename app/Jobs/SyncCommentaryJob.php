@@ -21,7 +21,7 @@ class SyncCommentaryJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels, ApiLogging;
 
-    private const CRON_KEY = 'commentary';
+    public const CRON_KEY = 'commentary';
     private const MATCHES_COLLECTION = 'matches';
     private const COMMENTARY_COLLECTION = 'commentary';
 
@@ -61,6 +61,12 @@ class SyncCommentaryJob implements ShouldQueue
 
     public function handle(): void
     {
+        $settingsService = app(AdminSettingsService::class);
+
+        if (!$settingsService->isCronEnabled(self::CRON_KEY)) {
+            return;
+        }
+
         $this->apiHost = config('services.cricbuzz.host', 'cricbuzz-cricket2.p.rapidapi.com');
         $this->baseUrl = sprintf('https://%s/mcenter/v1/', $this->apiHost);
         $this->logger = new CommentarySyncLogger($this->runId);
@@ -71,13 +77,6 @@ class SyncCommentaryJob implements ShouldQueue
             'timeout' => $this->timeout,
             'tries' => $this->tries,
         ]);
-
-        $settingsService = app(AdminSettingsService::class);
-
-        if (!$settingsService->isCronEnabled(self::CRON_KEY)) {
-            $this->log('job_disabled', 'warning', 'Commentary job paused via emergency controls.');
-            return;
-        }
 
         $this->firestoreSettings = $settingsService->firestoreSettings();
         $this->cricbuzzSettings = $settingsService->cricbuzzSettings();

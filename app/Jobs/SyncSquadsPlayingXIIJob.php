@@ -21,7 +21,7 @@ class SyncSquadsPlayingXIIJob implements ShouldQueue
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels, ApiLogging;
 
     private const ALLOWED_STATES = ["toss", "toss delay"];
-    private const CRON_KEY = 'squads_playing_xii';
+    public const CRON_KEY = 'squads_playing_xii';
     private const MATCHES_COLLECTION = 'matches';
     private const SQUADS_COLLECTION = 'squads';
     public int $timeout = 600;
@@ -56,6 +56,12 @@ class SyncSquadsPlayingXIIJob implements ShouldQueue
 
     public function handle(): void
     {
+        $settingsService = app(AdminSettingsService::class);
+
+        if (!$settingsService->isCronEnabled(self::CRON_KEY)) {
+            return;
+        }
+
         $this->apiHost = config('services.cricbuzz.host', 'cricbuzz-cricket2.p.rapidapi.com');
         $this->baseUrl = sprintf('https://%s/mcenter/v1/', $this->apiHost);
         $this->matchesCollection = self::MATCHES_COLLECTION;
@@ -69,13 +75,6 @@ class SyncSquadsPlayingXIIJob implements ShouldQueue
             'timeout' => $this->timeout,
             'tries' => $this->tries,
         ]);
-
-        $settingsService = app(AdminSettingsService::class);
-
-        if (!$settingsService->isCronEnabled(self::CRON_KEY)) {
-            $this->log('job_disabled', 'warning', 'Squad sync job paused via emergency controls.');
-            return;
-        }
 
         $this->firestoreSettings = $settingsService->firestoreSettings();
         $this->cricbuzzSettings = $settingsService->cricbuzzSettings();

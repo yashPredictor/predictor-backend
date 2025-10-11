@@ -99,6 +99,19 @@
             gap: 8px;
         }
 
+        .nav-heading {
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.14em;
+            color: var(--text-muted);
+            padding: 4px 4px 4px 22px;
+            margin-top: 18px;
+        }
+
+        .nav-heading:first-child {
+            margin-top: 0;
+        }
+
         .nav-link {
             display: flex;
             align-items: center;
@@ -814,6 +827,15 @@
                     $navItems = $adminNav ?? [];
                 @endphp
                 @foreach ($navItems as $item)
+                    @php
+                        $type = $item['type'] ?? 'link';
+                    @endphp
+                    @if ($type === 'heading')
+                        @if (!empty($item['label']))
+                            <div class="nav-heading">{{ $item['label'] }}</div>
+                        @endif
+                        @continue
+                    @endif
                     @php
                         $active = $item['active'] ?? null;
 

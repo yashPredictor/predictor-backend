@@ -188,8 +188,8 @@
             <span class="badge">{{ $jobsForChart->count() }} jobs</span>
         </div>
         <p class="section-subtitle">Visualise recent activity, total runs, and API consumption for each job inside the selected window.</p>
-        <div style="position: relative; min-height: 320px;">
-            <canvas id="dashboard-jobs-chart" height="280"></canvas>
+        <div style="position: relative; min-height: 220px; max-height: 260px;">
+            <canvas id="dashboard-jobs-chart" height="180"></canvas>
         </div>
     </section>
 

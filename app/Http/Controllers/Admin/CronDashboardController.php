@@ -241,15 +241,21 @@ class CronDashboardController extends Controller
 
         $items = [
             [
+                'type'   => 'link',
                 'key'    => 'dashboard',
                 'label'  => 'Overview',
                 'href'   => route('admin.dashboard'),
                 'active' => $routeName === 'admin.dashboard',
             ],
+            [
+                'type'  => 'heading',
+                'label' => 'Sync Jobs',
+            ],
         ];
 
         foreach (self::JOBS as $key => $config) {
             $items[] = [
+                'type'   => 'link',
                 'key'    => $key,
                 'label'  => $config['label'],
                 'href'   => route('admin.jobs.show', $key),
@@ -259,6 +265,20 @@ class CronDashboardController extends Controller
         }
 
         $items[] = [
+            'type'  => 'heading',
+            'label' => 'Operations',
+        ];
+
+        $items[] = [
+            'type'   => 'link',
+            'key'    => 'failed-jobs',
+            'label'  => 'Failed Jobs',
+            'href'   => route('admin.failed-jobs.index'),
+            'active' => str_starts_with($routeName, 'admin.failed-jobs.'),
+        ];
+
+        $items[] = [
+            'type'   => 'link',
             'key'    => 'emergency',
             'label'  => 'Emergency Controls',
             'href'   => route('admin.emergency.index'),
@@ -266,6 +286,7 @@ class CronDashboardController extends Controller
         ];
 
         $items[] = [
+            'type'   => 'link',
             'key'    => 'maintenance',
             'label'  => 'Jobs Maintenance',
             'href'   => route('admin.maintenance.edit'),
@@ -273,6 +294,7 @@ class CronDashboardController extends Controller
         ];
 
         $items[] = [
+            'type'   => 'link',
             'key'    => 'settings',
             'label'  => 'Integration Settings',
             'href'   => route('admin.settings.edit'),
@@ -280,6 +302,7 @@ class CronDashboardController extends Controller
         ];
 
         $items[] = [
+            'type'   => 'link',
             'key'    => 'pause-window',
             'label'  => 'Pause Window',
             'href'   => route('admin.pause-window.edit'),

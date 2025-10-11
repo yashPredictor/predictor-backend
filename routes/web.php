@@ -3,6 +3,7 @@
 use App\Http\Controllers\Admin\AuthController;
 use App\Http\Controllers\Admin\CronDashboardController;
 use App\Http\Controllers\Admin\CronEmergencyController;
+use App\Http\Controllers\Admin\FailedJobsController;
 use App\Http\Controllers\Admin\MaintenanceController;
 use App\Http\Controllers\Admin\PauseWindowController;
 use App\Http\Controllers\Admin\SettingsController;
@@ -30,6 +31,8 @@ Route::prefix('/')->name('admin.')->group(function () {
         Route::get('/maintenance', [MaintenanceController::class, 'edit'])->name('maintenance.edit');
         Route::put('/maintenance/log-retention', [MaintenanceController::class, 'updateLogRetention'])->name('maintenance.log-retention');
         Route::post('/maintenance/truncate', [MaintenanceController::class, 'truncateTable'])->name('maintenance.truncate');
+        Route::get('/failed-jobs', [FailedJobsController::class, 'index'])->name('failed-jobs.index');
+        Route::post('/failed-jobs/{failedJob}/retry', [FailedJobsController::class, 'retry'])->name('failed-jobs.retry');
         Route::get('/pause-window', [PauseWindowController::class, 'edit'])->name('pause-window.edit');
         Route::put('/pause-window', [PauseWindowController::class, 'update'])->name('pause-window.update');
         Route::post('/logout', [AuthController::class, 'logout'])->name('logout');

@@ -76,6 +76,7 @@ class SyncSeriesStatsJob implements ShouldQueue
         $this->statsBaseUrl = sprintf('https://%s/stats/v1/', $this->apiHost);
         $this->logger = new SeriesStatsSyncLogger($this->runId);
         $this->runId = $this->logger->runId;
+        $this->initApiLoggingContext($this->runId, self::CRON_KEY);
 
         $this->log('job_started', 'info', 'SyncSeriesStats job started', [
             'match_ids' => $this->matchIds,
@@ -466,15 +467,16 @@ class SyncSeriesStatsJob implements ShouldQueue
 
         foreach ($typeChunks as $typeChunk) {
             $responses = [];
+            $callIds = [];
 
             try {
-                $responses = Http::pool(function (Pool $pool) use ($typeChunk, $headers, $seriesId) {
+                $responses = Http::pool(function (Pool $pool) use ($typeChunk, $headers, $seriesId, &$callIds) {
                     $requests = [];
                     foreach ($typeChunk as $type) {
                         $value = $type['value'];
                         $url = $this->statsBaseUrl . $seriesId;
                         $query = ['statsType' => $value];
-                        $this->recordApiCall($url, 'GET', 'series_stats_' . $value);
+                        $callIds[$value] = $this->recordApiCall($url, 'GET', 'series_stats_' . $value);
                         $requests[] = $pool
                             ->withHeaders($headers)
                             ->get($url, $query);
@@ -482,6 +484,9 @@ class SyncSeriesStatsJob implements ShouldQueue
                     return $requests;
                 });
             } catch (Throwable $e) {
+                foreach ($callIds as $callId) {
+                    $this->finalizeApiCall($callId, null, $e);
+                }
                 $this->log('series_stats_fetch_failed', 'error', 'Failed to fetch stats chunk', $this->exceptionContext($e, [
                     'series_id' => $seriesId,
                 ]));
@@ -490,12 +495,20 @@ class SyncSeriesStatsJob implements ShouldQueue
 
             foreach ($typeChunk as $index => $type) {
                 $response = $responses[$index] ?? null;
+                $callId = $callIds[$type['value']] ?? null;
                 if ($response === null) {
+                    if ($callId !== null) {
+                        $this->finalizeApiCall($callId, null, new \RuntimeException('missing_response'));
+                    }
                     $this->log('series_stats_missing', 'error', 'No response received for stats request', [
                         'series_id' => $seriesId,
                         'stat_value' => $type['value'],
                     ]);
                     continue;
+                }
+
+                if ($callId !== null) {
+                    $this->finalizeApiCall($callId, $response);
                 }
 
                 if (!$response->successful()) {

@@ -71,6 +71,7 @@ class SyncSquadJob implements ShouldQueue
 
         $this->logger = new SquadSyncLogger($this->runId);
         $this->runId = $this->logger->runId;
+        $this->initApiLoggingContext($this->runId, self::CRON_KEY);
 
         $this->log('job_started', 'info', 'SyncSquad job started', [
             'requested_match_ids' => $this->matchIds,
@@ -214,15 +215,20 @@ class SyncSquadJob implements ShouldQueue
 
     private function performApiRequest(string $url, string $tag)
     {
-        try {
-            $this->recordApiCall($url, 'GET', $tag);
+        $callId = $this->recordApiCall($url, 'GET', $tag);
 
-            return Http::withHeaders([
+        try {
+            $response = Http::withHeaders([
                 'x-rapidapi-host' => $this->apiHost,
                 'x-rapidapi-key' => $this->apiKey,
                 'Content-Type' => 'application/json; charset=UTF-8',
             ])->get($url);
+
+            $this->finalizeApiCall($callId, $response);
+
+            return $response;
         } catch (Throwable $e) {
+            $this->finalizeApiCall($callId, null, $e);
             $this->log('api_request_failed', 'error', 'API request threw an exception', $this->exceptionContext($e, [
                 'url' => $url,
                 'tag' => $tag,

@@ -66,6 +66,7 @@ class SyncLiveMatchesJob implements ShouldQueue
         $this->apiHost = config('services.cricbuzz.host', 'cricbuzz-cricket2.p.rapidapi.com');
         $this->logger = new LiveMatchSyncLogger($this->runId);
         $this->runId = $this->logger->runId;
+        $this->initApiLoggingContext($this->runId, self::CRON_KEY);
 
         $this->log('job_started', 'info', 'SyncLiveMatches job started', [
             'matchIds' => $this->matchIds,
@@ -314,10 +315,13 @@ class SyncLiveMatchesJob implements ShouldQueue
             'Content-Type' => 'application/json; charset=UTF-8',
         ];
 
+        $callId = $this->recordApiCall($endpoint, 'GET', 'live_matches');
+
         try {
-            $this->recordApiCall($endpoint, 'GET', 'live_matches');
             $response = Http::withHeaders($headers)->get($endpoint);
+            $this->finalizeApiCall($callId, $response);
         } catch (Throwable $e) {
+            $this->finalizeApiCall($callId, null, $e);
             $this->log('api_request_failed', 'error', 'Live matches request failed', $this->exceptionContext($e, [
                 'endpoint' => $endpoint,
             ]));

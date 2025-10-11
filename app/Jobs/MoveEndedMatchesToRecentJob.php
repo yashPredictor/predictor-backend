@@ -55,6 +55,8 @@ class MoveEndedMatchesToRecentJob implements ShouldQueue
         }
 
         $this->logger = new RecentMatchStatusLogger($this->runId);
+        $this->runId = $this->logger->runId;
+        $this->initApiLoggingContext($this->runId, self::CRON_KEY);
 
         $this->log('job_started', 'info', 'MoveEndedMatchesToRecent job started', []);
 

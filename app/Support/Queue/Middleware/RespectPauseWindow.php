@@ -20,26 +20,25 @@ class RespectPauseWindow
             return;
         }
 
-        $delay = $this->pauseWindow->secondsUntilResume();
-        if ($delay <= 0) {
-            $delay = 300;
-        }
-
         $queueJob = $job instanceof JobContract ? $job : ($job->job ?? null);
         $jobName  = method_exists($job, 'displayName') ? $job->displayName() : get_class($job);
 
-        Log::info('Queue job delayed due to pause window', [
-            'job'   => $queueJob?->resolveName() ?? $jobName,
-            'delay' => $delay,
+        Log::info('Queue job skipped due to pause window', [
+            'job' => $queueJob?->resolveName() ?? $jobName,
         ]);
 
         if ($queueJob instanceof JobContract) {
-            $queueJob->release($delay);
+            $queueJob->delete();
+            return;
+        }
+
+        if (method_exists($job, 'delete')) {
+            $job->delete();
             return;
         }
 
         if (method_exists($job, 'release')) {
-            $job->release($delay);
+            $job->release(0);
         }
     }
 }

@@ -73,6 +73,7 @@ class SyncMatchOversJob implements ShouldQueue
         $this->baseUrl = sprintf('https://%s/mcenter/v1/', $this->apiHost);
         $this->logger = new MatchOversSyncLogger($this->runId);
         $this->runId = $this->logger->runId;
+        $this->initApiLoggingContext($this->runId, self::CRON_KEY);
 
         $this->log('job_started', 'info', 'SyncMatchOvers job started', [
             'match_ids' => $this->matchIds,
@@ -131,18 +132,22 @@ class SyncMatchOversJob implements ShouldQueue
         $api_failures = [];
 
         foreach (array_chunk($this->targetMatchIds, 5) as $chunk) {
+            $callIds = [];
             try {
-                $responses = Http::pool(function (Pool $pool) use ($chunk, $headers) {
+                $responses = Http::pool(function (Pool $pool) use ($chunk, $headers, &$callIds) {
                     $requests = [];
                     foreach ($chunk as $matchId) {
                         $url = $this->baseUrl . $matchId . '/overs';
-                        $this->recordApiCall($url, 'GET', 'match_overs');
+                        $callIds[$matchId] = $this->recordApiCall($url, 'GET', 'match_overs');
                         $requests[] = $pool->withHeaders($headers)->get($url);
                     }
 
                     return $requests;
                 });
             } catch (Throwable $e) {
+                foreach ($callIds as $matchId => $callId) {
+                    $this->finalizeApiCall($callId, null, $e);
+                }
                 foreach ($chunk as $matchId) {
                     $failures[] = $matchId;
                     $this->log('overs_fetch_failed', 'error', 'Failed to fetch overs batch', $this->exceptionContext($e, [
@@ -154,14 +159,22 @@ class SyncMatchOversJob implements ShouldQueue
             }
 
             foreach ($chunk as $index => $matchId) {
+                $callId = $callIds[$matchId] ?? null;
                 $response = $responses[$index] ?? null;
                 if ($response === null) {
+                    if ($callId !== null) {
+                        $this->finalizeApiCall($callId, null, new \RuntimeException('missing_response'));
+                    }
                     $failures[] = $matchId;
                     $this->log('overs_fetch_missing', 'error', 'No response received for overs request', [
                         'match_id' => $matchId,
                         'url' => $this->baseUrl . $matchId . '/overs',
                     ]);
                     continue;
+                }
+
+                if ($callId !== null) {
+                    $this->finalizeApiCall($callId, $response);
                 }
 
                 if (!$response->successful()) {

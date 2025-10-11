@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Admin\ApiAnalyticsController;
 use App\Http\Controllers\Admin\AuthController;
 use App\Http\Controllers\Admin\CronDashboardController;
 use App\Http\Controllers\Admin\CronEmergencyController;
@@ -23,6 +24,7 @@ Route::prefix('/')->name('admin.')->group(function () {
         Route::get('/', [CronDashboardController::class, 'index'])->name('dashboard');
         Route::get('/jobs/{job}', [CronDashboardController::class, 'job'])->name('jobs.show');
         Route::get('/jobs/{job}/runs/{runId}', [CronDashboardController::class, 'run'])->name('jobs.runs.show');
+        Route::get('/api-analytics', [ApiAnalyticsController::class, 'index'])->name('api-analytics.index');
         Route::get('/emergency', [CronEmergencyController::class, 'index'])->name('emergency.index');
         Route::post('/emergency/toggle', [CronEmergencyController::class, 'toggle'])->name('emergency.toggle');
         Route::get('/settings', [SettingsController::class, 'edit'])->name('settings.edit');

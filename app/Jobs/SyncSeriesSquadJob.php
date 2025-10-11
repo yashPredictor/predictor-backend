@@ -63,6 +63,7 @@ class SyncSeriesSquadJob implements ShouldQueue
         $this->apiHost = config('services.cricbuzz.host', 'cricbuzz-cricket2.p.rapidapi.com');
         $this->logger = new SeriesSquadSyncLogger($this->runId);
         $this->runId = $this->logger->runId;
+        $this->initApiLoggingContext($this->runId, self::CRON_KEY);
 
         $this->log('job_started', 'info', 'SyncSeriesSquad job started', [
             'series_ids' => $this->seriesIds,
@@ -270,13 +271,15 @@ class SyncSeriesSquadJob implements ShouldQueue
 
     private function performApiRequest(string $url, string $tag)
     {
-        try {
-            $this->recordApiCall($url, 'GET', $tag);
+        $callId = $this->recordApiCall($url, 'GET', $tag);
 
+        try {
             $response = Http::withHeaders([
                 'x-rapidapi-host' => $this->apiHost,
                 'x-rapidapi-key' => $this->apiKey,
             ])->get($url);
+
+            $this->finalizeApiCall($callId, $response);
 
             if (!$response->successful()) {
                 $this->log('series_squad_api_error', 'error', 'Series squads API returned an error response', $this->responseContext($response, [
@@ -288,6 +291,7 @@ class SyncSeriesSquadJob implements ShouldQueue
 
             return $response;
         } catch (Throwable $e) {
+            $this->finalizeApiCall($callId, null, $e);
             $this->log('series_squad_api_exception', 'error', 'Series squads API request failed', $this->exceptionContext($e, [
                 'url' => $url,
             ]));

@@ -71,6 +71,7 @@ class SyncCommentaryJob implements ShouldQueue
         $this->baseUrl = sprintf('https://%s/mcenter/v1/', $this->apiHost);
         $this->logger = new CommentarySyncLogger($this->runId);
         $this->runId = $this->logger->runId;
+        $this->initApiLoggingContext($this->runId, self::CRON_KEY);
 
         $this->log('job_started', 'info', 'SyncCommentary job started', [
             'match_ids' => $this->matchIds,
@@ -124,13 +125,14 @@ class SyncCommentaryJob implements ShouldQueue
         foreach (array_chunk($this->targetMatchIds, 5) as $chunk) {
             $chunk = array_values($chunk);
             $responses = [];
+            $callIds = [];
 
             try {
-                $responses = Http::pool(function (Pool $pool) use ($chunk, $headers) {
+                $responses = Http::pool(function (Pool $pool) use ($chunk, $headers, &$callIds) {
                     $requests = [];
                     foreach ($chunk as $matchId) {
                         $url = $this->baseUrl . $matchId . '/comm';
-                        $this->recordApiCall($url, 'GET', 'commentary_' . $matchId);
+                        $callIds[$matchId] = $this->recordApiCall($url, 'GET', 'commentary_' . $matchId);
                         $requests[] = $pool
                             ->withHeaders($headers)
                             ->get($url);
@@ -139,6 +141,9 @@ class SyncCommentaryJob implements ShouldQueue
                     return $requests;
                 });
             } catch (Throwable $e) {
+                foreach ($callIds as $callId) {
+                    $this->finalizeApiCall($callId, null, $e);
+                }
                 foreach ($chunk as $matchId) {
                     $failures[] = $matchId;
                     $this->log('commentary_fetch_failed', 'error', 'Failed to fetch commentary batch', $this->exceptionContext($e, [
@@ -149,13 +154,21 @@ class SyncCommentaryJob implements ShouldQueue
             }
 
             foreach ($chunk as $index => $matchId) {
+                $callId = $callIds[$matchId] ?? null;
                 $response = $responses[$index] ?? null;
                 if ($response === null) {
+                    if ($callId !== null) {
+                        $this->finalizeApiCall($callId, null, new \RuntimeException('missing_response'));
+                    }
                     $failures[] = $matchId;
                     $this->log('commentary_fetch_missing', 'error', 'No response received for commentary request', [
                         'match_id' => $matchId,
                     ]);
                     continue;
+                }
+
+                if ($callId !== null) {
+                    $this->finalizeApiCall($callId, $response);
                 }
 
                 if (!$response->successful()) {

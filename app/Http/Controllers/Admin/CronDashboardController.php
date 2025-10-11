@@ -272,6 +272,14 @@ class CronDashboardController extends Controller
         }
 
         $items[] = [
+            'type'   => 'link',
+            'key'    => 'api-analytics',
+            'label'  => 'API Analytics',
+            'href'   => route('admin.api-analytics.index'),
+            'active' => $routeName === 'admin.api-analytics.index',
+        ];
+
+        $items[] = [
             'type'  => 'heading',
             'label' => 'Operations',
         ];

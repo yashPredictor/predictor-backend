@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Jobs\SyncCommentaryJob;
+use App\Services\AdminSettingsService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -12,13 +13,19 @@ class SyncCommentary extends Command
     protected $signature = 'app:commentary-sync {--matchId=* : Sync commentary for specific match IDs only.}';
     protected $description = 'Dispatches a queue job to refresh commentary snapshots for live matches.';
 
-    /**
-     * @return string[]
-     */
     private function normalizeOptionValues(string $optionName): array
     {
-        $raw = $this->option($optionName);
-        $values = is_array($raw) ? $raw : ($raw === null ? [] : [$raw]);
+        $raw = null;
+
+        if ($this->input !== null) {
+            $raw = $this->input->getOption($optionName);
+        }
+
+        if ($raw === null) {
+            return [];
+        }
+
+        $values = is_array($raw) ? $raw : [$raw];
 
         $normalized = [];
 
@@ -52,6 +59,20 @@ class SyncCommentary extends Command
         $matchIds = $this->normalizeOptionValues('matchId');
         $runId    = (string) Str::uuid();
 
+        /** @var AdminSettingsService $settings */
+        $settings = app(AdminSettingsService::class);
+
+        if (!$settings->isCronEnabled(SyncCommentaryJob::CRON_KEY)) {
+            $message = 'Commentary sync skipped because the cron is paused via emergency controls.';
+            if ($this->output !== null) {
+                $this->warn($message);
+            }
+            Log::warning('SYNC-COMMENTARY: ' . $message, [
+                'match_ids' => $matchIds,
+            ]);
+            return self::SUCCESS;
+        }
+
         SyncCommentaryJob::dispatch($matchIds, $runId);
 
         if (empty($matchIds)) {
@@ -60,7 +81,9 @@ class SyncCommentary extends Command
             $message = 'Commentary sync job queued for match IDs: ' . implode(', ', $matchIds) . '.';
         }
 
-        $this->info($message . " Run ID: {$runId}");
+        if ($this->output !== null) {
+            $this->info($message . " Run ID: {$runId}");
+        }
 
         Log::info('SYNC-COMMENTARY: ' . $message, [
             'run_id'    => $runId,

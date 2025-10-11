@@ -20,7 +20,7 @@ class SyncLiveMatchesJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels, ApiLogging;
 
-    private const CRON_KEY = 'live-matches';
+    public const CRON_KEY = 'live-matches';
     
     public int $timeout = 600;
 
@@ -57,6 +57,12 @@ class SyncLiveMatchesJob implements ShouldQueue
 
     public function handle(): void
     {
+        $settingsService = app(AdminSettingsService::class);
+
+        if (!$settingsService->isCronEnabled(self::CRON_KEY)) {
+            return;
+        }
+
         $this->apiHost = config('services.cricbuzz.host', 'cricbuzz-cricket2.p.rapidapi.com');
         $this->logger = new LiveMatchSyncLogger($this->runId);
         $this->runId = $this->logger->runId;
@@ -66,13 +72,6 @@ class SyncLiveMatchesJob implements ShouldQueue
             'timeout' => $this->timeout,
             'tries' => $this->tries,
         ]);
-
-        $settingsService = app(AdminSettingsService::class);
-
-        if (!$settingsService->isCronEnabled(self::CRON_KEY)) {
-            $this->log('job_disabled', 'warning', 'Live matches job paused via emergency controls.');
-            return;
-        }
 
         $this->firestoreSettings = $settingsService->firestoreSettings();
         $this->cricbuzzSettings = $settingsService->cricbuzzSettings();
@@ -609,18 +608,18 @@ class SyncLiveMatchesJob implements ShouldQueue
      */
     private function preserveRunProgress(array $latest, array $existing): array
     {
-        foreach ($latest as $key => $value) {
-            if ($key === 'runs' && isset($existing[$key]) && is_numeric($existing[$key]) && is_numeric($value)) {
-                if ((float) $value < (float) $existing[$key]) {
-                    $latest[$key] = $existing[$key];
-                }
-                continue;
-            }
+        // foreach ($latest as $key => $value) {
+        //     if ($key === 'runs' && isset($existing[$key]) && is_numeric($existing[$key]) && is_numeric($value)) {
+        //         if ((float) $value < (float) $existing[$key]) {
+        //             $latest[$key] = $existing[$key];
+        //         }
+        //         continue;
+        //     }
 
-            if (is_array($value) && isset($existing[$key]) && is_array($existing[$key])) {
-                $latest[$key] = $this->preserveRunProgress($value, $existing[$key]);
-            }
-        }
+        //     if (is_array($value) && isset($existing[$key]) && is_array($existing[$key])) {
+        //         $latest[$key] = $this->preserveRunProgress($value, $existing[$key]);
+        //     }
+        // }
 
         return $latest;
     }

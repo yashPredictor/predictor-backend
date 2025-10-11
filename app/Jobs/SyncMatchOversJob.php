@@ -21,7 +21,7 @@ class SyncMatchOversJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels, ApiLogging;
 
-    private const CRON_KEY = 'match-overs';
+    public const CRON_KEY = 'match-overs';
     public int $timeout = 600;
     public int $tries = 5;
 
@@ -63,6 +63,12 @@ class SyncMatchOversJob implements ShouldQueue
 
     public function handle(): void
     {
+        $settingsService = app(AdminSettingsService::class);
+
+        if (!$settingsService->isCronEnabled(self::CRON_KEY)) {
+            return;
+        }
+
         $this->apiHost = config('services.cricbuzz.host', 'cricbuzz-cricket2.p.rapidapi.com');
         $this->baseUrl = sprintf('https://%s/mcenter/v1/', $this->apiHost);
         $this->logger = new MatchOversSyncLogger($this->runId);
@@ -73,13 +79,6 @@ class SyncMatchOversJob implements ShouldQueue
             'timeout' => $this->timeout,
             'tries' => $this->tries,
         ]);
-
-        $settingsService = app(AdminSettingsService::class);
-
-        if (!$settingsService->isCronEnabled(self::CRON_KEY)) {
-            $this->log('job_disabled', 'warning', 'Match overs job paused via emergency controls.');
-            return;
-        }
 
         $this->firestoreSettings = $settingsService->firestoreSettings();
         $this->cricbuzzSettings = $settingsService->cricbuzzSettings();
@@ -387,25 +386,28 @@ class SyncMatchOversJob implements ShouldQueue
         $this->logger->log($action, $status, $message, $context);
     }
 
-    /**
-     * @param array<mixed> $latest
-     * @param array<mixed> $existing
-     * @return array<mixed>
-     */
+    
     private function preserveRunProgress(array $latest, array $existing): array
     {
-        foreach ($latest as $key => $value) {
-            if ($key === 'runs' && isset($existing[$key]) && is_numeric($existing[$key]) && is_numeric($value)) {
-                if ((float) $value < (float) $existing[$key]) {
-                    $latest[$key] = $existing[$key];
-                }
-                continue;
-            }
+        // $maxStep = 15;
 
-            if (is_array($value) && isset($existing[$key]) && is_array($existing[$key])) {
-                $latest[$key] = $this->preserveRunProgress($value, $existing[$key]);
-            }
-        }
+        // foreach ($latest as $key => $value) {
+        //     if ($key === 'runs' && isset($existing[$key]) && is_numeric($existing[$key]) && is_numeric($value)) {
+        //         $old = (int) $existing[$key];
+        //         $new = (int) $value;
+
+        //         if ($new >= $old) {
+        //             $latest[$key] = ($new - $old) <= $maxStep ? $new : $old;
+        //         } else {
+        //             $latest[$key] = ($old - $new) > $maxStep ? $new : $old;
+        //         }
+        //         continue;
+        //     }
+
+        //     if (is_array($value) && isset($existing[$key]) && is_array($existing[$key])) {
+        //         $latest[$key] = $this->preserveRunProgress($value, $existing[$key]);
+        //     }
+        // }
 
         return $latest;
     }

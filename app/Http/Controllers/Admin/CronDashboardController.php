@@ -7,6 +7,7 @@ use App\Models\CommentarySyncLog;
 use App\Models\LiveMatchSyncLog;
 use App\Models\MatchOversSyncLog;
 use App\Models\RecentMatchStatusLog;
+use App\Models\SeriesStatsSyncLog;
 use App\Models\SeriesSyncLog;
 use App\Models\SeriesSquadSyncLog;
 use App\Models\SquadSyncPlayingXIILog;
@@ -47,6 +48,12 @@ class CronDashboardController extends Controller
             'description' => 'Refreshes detailed scorecards for live matches.',
             'accent'      => 'cyan',
             'model'       => ScorecardSyncLog::class,
+        ],
+        'series-stats' => [
+            'label'       => 'Series Stats Sync',
+            'description' => 'Fetches post-match leaderboards for completed series.',
+            'accent'      => 'lime',
+            'model'       => SeriesStatsSyncLog::class,
         ],
         'commentary' => [
             'label'       => 'Commentary Sync',

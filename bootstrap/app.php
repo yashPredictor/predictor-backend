@@ -28,7 +28,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $shouldRun = static fn(): bool => !app(PauseWindowService::class)->isPaused();
 
         $schedule->job(new SyncLiveMatchesJob())
-            ->everyThreeMinutes()
+            ->everyThirtySeconds()
             ->withoutOverlapping()
             ->when($shouldRun);
 

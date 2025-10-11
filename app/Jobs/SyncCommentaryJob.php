@@ -276,19 +276,44 @@ class SyncCommentaryJob implements ShouldQueue
         $timestamp = $now->valueOf();
         $serverTime = $now->toIso8601String();
 
-        $payload = array_merge($commentaryData, [
-            'updatedAt' => $timestamp,
-            'serverTime' => $serverTime,
-        ]);
+        $existingData = [];
+        try {
+            $snapshot = $this->firestore
+                ->collection(self::COMMENTARY_COLLECTION)
+                ->document($matchId)
+                ->snapshot();
+
+            if ($snapshot->exists()) {
+                $existingData = $snapshot->data() ?? [];
+            }
+        } catch (Throwable $e) {
+            $this->log('commentary_snapshot_failed', 'warning', 'Failed to read existing commentary snapshot', $this->exceptionContext($e, [
+                'match_id' => $matchId,
+            ]));
+        }
+
+        $existingWrapper = data_get($existingData, 'comwrapper', []);
+        $latestWrapper = $commentaryData['comwrapper'] ?? [];
+
+        if (!is_array($existingWrapper)) {
+            $existingWrapper = [];
+        }
+        if (!is_array($latestWrapper)) {
+            $latestWrapper = [];
+        }
+
+        $commentaryData['comwrapper'] = $this->mergeCommentaryEntries($existingWrapper, $latestWrapper);
+        $commentaryData['updatedAt'] = $timestamp;
+        $commentaryData['serverTime'] = $serverTime;
 
         $this->firestore
             ->collection(self::COMMENTARY_COLLECTION)
             ->document($matchId)
-            ->set($payload, ['merge' => true]);
+            ->set($commentaryData, ['merge' => true]);
     }
 
     /**
-     * @return array<string, string>a
+     * @return array<string, string>
      */
     private function getHeaders(): array
     {
@@ -306,5 +331,70 @@ class SyncCommentaryJob implements ShouldQueue
         }
 
         $this->logger->log($action, $status, $message, $context);
+    }
+
+    /**
+     * @param array<int, mixed> $existing
+     * @param array<int, mixed> $latest
+     * @return array<int, mixed>
+     */
+    private function mergeCommentaryEntries(array $existing, array $latest): array
+    {
+        if (empty($existing)) {
+            return array_values($latest);
+        }
+
+        $seen = [];
+        $merged = [];
+
+        foreach ($existing as $entry) {
+            $merged[] = $entry;
+            $key = $this->commentaryEntryKey($entry);
+            if ($key !== null) {
+                $seen[$key] = true;
+            }
+        }
+
+        foreach ($latest as $entry) {
+            $key = $this->commentaryEntryKey($entry);
+            if ($key !== null && isset($seen[$key])) {
+                continue;
+            }
+
+            $merged[] = $entry;
+            if ($key !== null) {
+                $seen[$key] = true;
+            }
+        }
+
+        return $merged;
+    }
+
+    /**
+     * @param array<mixed> $entry
+     */
+    private function commentaryEntryKey(array $entry): ?string
+    {
+        if (!isset($entry['commentary']) || !is_array($entry['commentary'])) {
+            return null;
+        }
+
+        $commentary = $entry['commentary'];
+        $timestamp = $commentary['timestamp'] ?? null;
+        $ball = $commentary['ballnbr'] ?? null;
+
+        if ($timestamp !== null) {
+            return 'ts:' . (string) $timestamp . '|ball:' . ($ball !== null ? (string) $ball : 'null');
+        }
+
+        if ($ball !== null) {
+            return 'ball:' . (string) $ball;
+        }
+
+        if (!empty($commentary['commtxt'])) {
+            return 'text:' . md5((string) $commentary['commtxt']);
+        }
+
+        return null;
     }
 }

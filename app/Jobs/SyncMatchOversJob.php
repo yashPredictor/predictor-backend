@@ -390,25 +390,25 @@ class SyncMatchOversJob implements ShouldQueue
     
     private function preserveRunProgress(array $latest, array $existing): array
     {
-        $maxStep = 15;
+        // $maxStep = 15;
 
-        foreach ($latest as $key => $value) {
-            if ($key === 'runs' && isset($existing[$key]) && is_numeric($existing[$key]) && is_numeric($value)) {
-                $old = (int) $existing[$key];
-                $new = (int) $value;
+        // foreach ($latest as $key => $value) {
+        //     if ($key === 'runs' && isset($existing[$key]) && is_numeric($existing[$key]) && is_numeric($value)) {
+        //         $old = (int) $existing[$key];
+        //         $new = (int) $value;
 
-                if ($new >= $old) {
-                    $latest[$key] = ($new - $old) <= $maxStep ? $new : $old;
-                } else {
-                    $latest[$key] = ($old - $new) > $maxStep ? $new : $old;
-                }
-                continue;
-            }
+        //         if ($new >= $old) {
+        //             $latest[$key] = ($new - $old) <= $maxStep ? $new : $old;
+        //         } else {
+        //             $latest[$key] = ($old - $new) > $maxStep ? $new : $old;
+        //         }
+        //         continue;
+        //     }
 
-            if (is_array($value) && isset($existing[$key]) && is_array($existing[$key])) {
-                $latest[$key] = $this->preserveRunProgress($value, $existing[$key]);
-            }
-        }
+        //     if (is_array($value) && isset($existing[$key]) && is_array($existing[$key])) {
+        //         $latest[$key] = $this->preserveRunProgress($value, $existing[$key]);
+        //     }
+        // }
 
         return $latest;
     }

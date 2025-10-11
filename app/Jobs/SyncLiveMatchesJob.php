@@ -609,18 +609,18 @@ class SyncLiveMatchesJob implements ShouldQueue
      */
     private function preserveRunProgress(array $latest, array $existing): array
     {
-        foreach ($latest as $key => $value) {
-            if ($key === 'runs' && isset($existing[$key]) && is_numeric($existing[$key]) && is_numeric($value)) {
-                if ((float) $value < (float) $existing[$key]) {
-                    $latest[$key] = $existing[$key];
-                }
-                continue;
-            }
+        // foreach ($latest as $key => $value) {
+        //     if ($key === 'runs' && isset($existing[$key]) && is_numeric($existing[$key]) && is_numeric($value)) {
+        //         if ((float) $value < (float) $existing[$key]) {
+        //             $latest[$key] = $existing[$key];
+        //         }
+        //         continue;
+        //     }
 
-            if (is_array($value) && isset($existing[$key]) && is_array($existing[$key])) {
-                $latest[$key] = $this->preserveRunProgress($value, $existing[$key]);
-            }
-        }
+        //     if (is_array($value) && isset($existing[$key]) && is_array($existing[$key])) {
+        //         $latest[$key] = $this->preserveRunProgress($value, $existing[$key]);
+        //     }
+        // }
 
         return $latest;
     }

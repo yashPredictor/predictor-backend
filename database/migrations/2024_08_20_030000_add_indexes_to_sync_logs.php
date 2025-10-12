@@ -16,6 +16,7 @@ return new class extends Migration {
         'squad_sync_logs',
         'commentary_sync_logs',
         'series_stats_sync_logs',
+        'series_venues_sync_logs',
     ];
 
     public function up(): void

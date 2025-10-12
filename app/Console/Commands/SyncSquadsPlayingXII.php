@@ -59,7 +59,6 @@ class SyncSquadsPlayingXII extends Command
         $matchIds = $this->normalizeOptionValues('matchId');
         $runId    = (string) Str::uuid();
 
-        /** @var AdminSettingsService $settings */
         $settings = app(AdminSettingsService::class);
 
         if (!$settings->isCronEnabled(SyncSquadsPlayingXIIJob::CRON_KEY)) {
@@ -85,10 +84,10 @@ class SyncSquadsPlayingXII extends Command
             $this->info($message . " Run ID: {$runId}");
         }
 
-        Log::info('SYNC-SQUAD: ' . $message, [
-            'run_id'    => $runId,
-            'match_ids' => $matchIds,
-        ]);
+        // Log::info('SYNC-SQUAD: ' . $message, [
+        //     'run_id'    => $runId,
+        //     'match_ids' => $matchIds,
+        // ]);
 
         return self::SUCCESS;
     }

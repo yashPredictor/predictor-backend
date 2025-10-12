@@ -90,10 +90,10 @@ class SyncScorecards extends Command
             $this->info($message . " Run ID: {$runId}");
         }
 
-        Log::info('SYNC-SCORECARD: ' . $message, [
-            'run_id'    => $runId,
-            'match_ids' => $matchIds,
-        ]);
+        // Log::info('SYNC-SCORECARD: ' . $message, [
+        //     'run_id'    => $runId,
+        //     'match_ids' => $matchIds,
+        // ]);
 
         return self::SUCCESS;
     }

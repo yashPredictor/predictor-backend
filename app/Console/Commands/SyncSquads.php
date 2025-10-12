@@ -90,10 +90,10 @@ class SyncSquads extends Command
             $this->info($message . " Run ID: {$runId}");
         }
 
-        Log::info('SYNC-SQUAD: ' . $message, [
-            'run_id'    => $runId,
-            'match_ids' => $matchIds,
-        ]);
+        // Log::info('SYNC-SQUAD: ' . $message, [
+        //     'run_id'    => $runId,
+        //     'match_ids' => $matchIds,
+        // ]);
 
         return self::SUCCESS;
     }

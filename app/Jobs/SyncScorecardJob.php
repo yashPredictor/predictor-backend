@@ -42,16 +42,10 @@ class SyncScorecardJob implements ShouldQueue
     /** @var string[] */
     private array $liveStates = [
         "live",
-        "Live",
         "current",
-        "Current",
         "progress",
-        "Progress",
-        "inprogress",
-        "Inprogress",
         "in progress",
-        "In progress",
-        "In Progress",
+        "inning break",
     ];
 
     /** @var string[] */

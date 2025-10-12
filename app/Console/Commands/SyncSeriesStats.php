@@ -102,11 +102,11 @@ class SyncSeriesStats extends Command
             $this->info($message);
         }
 
-        Log::info('SYNC-SERIES-STATS: ' . $message, [
-            'run_id'    => $runId,
-            'match_ids' => $matchIds,
-            'series_ids'=> $seriesIds,
-        ]);
+        // Log::info('SYNC-SERIES-STATS: ' . $message, [
+        //     'run_id'    => $runId,
+        //     'match_ids' => $matchIds,
+        //     'series_ids'=> $seriesIds,
+        // ]);
 
         return self::SUCCESS;
     }

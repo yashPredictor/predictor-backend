@@ -84,11 +84,11 @@ class SyncSeriesData extends Command
             $this->info("Series sync job queued. Run ID: {$runId}");
         }
 
-        Log::info('SYNC-SERIES: Series sync job queued', [
-            'run_id' => $runId,
-            'series_ids' => $seriesIds,
-            'match_ids' => $matchIds,
-        ]);
+        // Log::info('SYNC-SERIES: Series sync job queued', [
+        //     'run_id' => $runId,
+        //     'series_ids' => $seriesIds,
+        //     'match_ids' => $matchIds,
+        // ]);
 
         return self::SUCCESS;
     }

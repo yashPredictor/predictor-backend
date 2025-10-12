@@ -2,17 +2,16 @@
 
 namespace App\Console\Commands;
 
-use App\Jobs\SyncSeriesSquadJob;
+use App\Jobs\SyncSeriesVenuesJob;
 use App\Services\AdminSettingsService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
-class SyncSeriesSquads extends Command
+class SyncSeriesVenues extends Command
 {
-    protected $signature = 'app:series-squads-sync {--seriesId=* : Sync squads for specific series IDs only.}';
-
-    protected $description = 'Dispatches a queue job to fetch series squad information from Cricbuzz.';
+    protected $signature = 'app:series-venues-sync {--seriesId=* : Sync venues for specific series IDs only.}';
+    protected $description = 'Dispatches a queue job to refresh venues for upcoming series.';
 
     /**
      * @return string[]
@@ -66,31 +65,31 @@ class SyncSeriesSquads extends Command
         /** @var AdminSettingsService $settings */
         $settings = app(AdminSettingsService::class);
 
-        if (!$settings->isCronEnabled(SyncSeriesSquadJob::CRON_KEY)) {
-            $message = 'Series squad sync skipped because the cron is paused via emergency controls.';
+        if (!$settings->isCronEnabled(SyncSeriesVenuesJob::CRON_KEY)) {
+            $message = 'Series venues sync skipped because the cron is paused via emergency controls.';
             if ($this->output !== null) {
                 $this->warn($message);
             }
-            Log::warning('SYNC-SERIES-SQUADS: ' . $message, [
+            Log::warning('SYNC-SERIES-VENUES: ' . $message, [
                 'series_ids' => $seriesIds,
             ]);
             return self::SUCCESS;
         }
 
-        SyncSeriesSquadJob::dispatch($seriesIds, $runId);
+        SyncSeriesVenuesJob::dispatch($seriesIds, $runId);
 
         if (empty($seriesIds)) {
-            $message = 'Series squad sync job queued for eligible series within 30 days.';
+            $message = 'Series venues sync job queued for upcoming series within 30 days.';
         } else {
-            $message = 'Series squad sync job queued for series IDs: ' . implode(', ', $seriesIds) . '.';
+            $message = 'Series venues sync job queued for series IDs: ' . implode(', ', $seriesIds) . '.';
         }
 
         if ($this->output !== null) {
             $this->info($message . " Run ID: {$runId}");
         }
 
-        // Log::info('SYNC-SERIES-SQUADS: ' . $message, [
-        //     'run_id'     => $runId,
+        // Log::info('SYNC-SERIES-VENUES: ' . $message, [
+        //     'run_id' => $runId,
         //     'series_ids' => $seriesIds,
         // ]);
 

@@ -38,9 +38,9 @@ class SyncRecentMatches extends Command
             $this->info($message . " Run ID: {$runId}");
         }
 
-        Log::info('SYNC-RECENT-MATCHES: ' . $message, [
-            'run_id' => $runId,
-        ]);
+        // Log::info('SYNC-RECENT-MATCHES: ' . $message, [
+        //     'run_id' => $runId,
+        // ]);
 
         return self::SUCCESS;
     }

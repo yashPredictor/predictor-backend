@@ -7,6 +7,7 @@ use App\Jobs\SyncScorecardJob;
 use App\Jobs\MoveEndedMatchesToRecentJob;
 use App\Jobs\SyncSeriesDataJob;
 use App\Jobs\SyncSeriesSquadJob;
+use App\Jobs\SyncSeriesVenuesJob;
 use App\Jobs\SyncSquadJob;
 use App\Jobs\SyncSquadsPlayingXIIJob;
 use App\Services\PauseWindowService;
@@ -33,7 +34,7 @@ return Application::configure(basePath: dirname(__DIR__))
             ->when($shouldRun);
 
         $schedule->job(new SyncMatchOversJob())
-            ->everyMinute()
+            ->everyThirtySeconds()
             ->withoutOverlapping()
             ->when($shouldRun);
 
@@ -43,12 +44,12 @@ return Application::configure(basePath: dirname(__DIR__))
             ->when($shouldRun);
 
         $schedule->job(new SyncScorecardJob())
-            ->everyThreeMinutes()
+            ->everyThirtySeconds()
             ->withoutOverlapping()
             ->when($shouldRun);
 
         $schedule->job(new SyncCommentary())
-            ->everyThreeMinutes()
+            ->everyThirtySeconds()
             ->withoutOverlapping()
             ->when($shouldRun);
 
@@ -59,6 +60,11 @@ return Application::configure(basePath: dirname(__DIR__))
     
         $schedule->job(new SyncSquadsPlayingXIIJob())
             ->everyMinute()
+            ->withoutOverlapping()
+            ->when($shouldRun);
+
+        $schedule->job(new SyncSeriesVenuesJob())
+            ->dailyAt('11:00')
             ->withoutOverlapping()
             ->when($shouldRun);
 

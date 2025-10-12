@@ -88,10 +88,10 @@ class SyncLiveMatches extends Command
             $this->info($message . " Run ID: {$runId}");
         }
 
-        Log::info('SYNC-LIVE-MATCHES: ' . $message, [
-            'run_id'    => $runId,
-            'match_ids' => $matchIds,
-        ]);
+        // Log::info('SYNC-LIVE-MATCHES: ' . $message, [
+        //     'run_id'    => $runId,
+        //     'match_ids' => $matchIds,
+        // ]);
 
         return self::SUCCESS;
     }

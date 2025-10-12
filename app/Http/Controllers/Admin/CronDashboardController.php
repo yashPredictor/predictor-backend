@@ -8,6 +8,7 @@ use App\Models\LiveMatchSyncLog;
 use App\Models\MatchOversSyncLog;
 use App\Models\RecentMatchStatusLog;
 use App\Models\SeriesStatsSyncLog;
+use App\Models\SeriesVenuesSyncLog;
 use App\Models\SeriesSyncLog;
 use App\Models\SeriesSquadSyncLog;
 use App\Models\SquadSyncPlayingXIILog;
@@ -84,6 +85,12 @@ class CronDashboardController extends Controller
             'description' => 'Promotes recently completed matches into the recent state.',
             'accent'      => 'slate',
             'model'       => RecentMatchStatusLog::class,
+        ],
+        'series-venues' => [
+            'label'       => 'Series Venues Sync',
+            'description' => 'Caches venue lists for upcoming series.',
+            'accent'      => 'orange',
+            'model'       => SeriesVenuesSyncLog::class,
         ],
     ];
 

@@ -20,7 +20,7 @@ class SyncSquadsPlayingXIIJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels, ApiLogging;
 
-    private const ALLOWED_STATES = ["toss", "toss delay"];
+    private const ALLOWED_STATES = ["toss", "toss delay", "delay"];
     public const CRON_KEY = 'squads_playing_xii';
     private const MATCHES_COLLECTION = 'matches';
     private const SQUADS_COLLECTION = 'squads';

@@ -123,8 +123,12 @@ trait ApiLogging
         $exceptionClass = null;
         $exceptionMessage = null;
 
+        $responseBody = null;
+
         if ($response !== null) {
-            $responseBytes = strlen((string) $response->body());
+            $bodyString = (string) $response->body();
+            $responseBytes = strlen($bodyString);
+            $responseBody = $this->transformResponseBody($bodyString);
             $isError = $statusCode !== null && $statusCode >= 400;
         }
 
@@ -146,10 +150,25 @@ trait ApiLogging
             'is_error' => $isError,
             'duration_ms' => $durationMs,
             'response_bytes' => $responseBytes,
+            'response_body' => $responseBody,
             'exception_class' => $exceptionClass,
             'exception_message' => $exceptionMessage,
             'requested_at' => $details['requested_at'] ?? Carbon::now(),
         ]);
+    }
+
+    protected function transformResponseBody(string $body): ?string
+    {
+        if ($body === '') {
+            return null;
+        }
+
+        $maxLength = 65535; // ~64KB to keep row sizes manageable
+        if (strlen($body) > $maxLength) {
+            $body = substr($body, 0, $maxLength);
+        }
+
+        return $body;
     }
 
     protected function getApiCallBreakdown(): array

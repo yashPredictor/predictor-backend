@@ -20,6 +20,7 @@ return new class extends Migration {
             $table->boolean('is_error')->default(false)->index();
             $table->unsignedBigInteger('duration_ms')->nullable();
             $table->unsignedBigInteger('response_bytes')->nullable();
+            $table->longText('response_body')->nullable();
             $table->string('exception_class')->nullable();
             $table->text('exception_message')->nullable();
             $table->timestamp('requested_at')->useCurrent();

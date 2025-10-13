@@ -18,6 +18,7 @@ class ApiRequestLog extends Model
         'is_error',
         'duration_ms',
         'response_bytes',
+        'response_body',
         'exception_class',
         'exception_message',
         'requested_at',

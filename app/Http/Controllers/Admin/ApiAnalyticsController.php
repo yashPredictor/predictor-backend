@@ -93,6 +93,27 @@ class ApiAnalyticsController extends Controller
             ->orderBy('method')
             ->pluck('method');
 
+        if ($request->wantsJson()) {
+            return response()->json([
+                'html' => view('admin.partials.api-analytics-table', [
+                    'logs' => $logs,
+                    'statusClassMap' => [
+                        true => 'status-pill error',
+                        false => 'status-pill success',
+                    ],
+                ])->render(),
+                'pagination' => view('admin.partials.pagination', ['paginator' => $logs])->render(),
+                'totals' => [
+                    'totalCalls' => number_format($totalCalls),
+                    'successCalls' => number_format($successCalls),
+                    'errorCalls' => number_format($errorCalls),
+                    'averageDuration' => $averageDuration !== null ? $averageDuration . ' ms' : '—',
+                ],
+                'hostsHtml' => view('admin.partials.api-analytics-hosts', ['hosts' => $topHosts])->render(),
+                'tagsHtml'  => view('admin.partials.api-analytics-tags', ['tags' => $topTags])->render(),
+            ]);
+        }
+
         return view('admin.api-analytics', [
             'pageTitle' => 'API Analytics',
             'totalCalls' => $totalCalls,
@@ -111,6 +132,35 @@ class ApiAnalyticsController extends Controller
                 'method' => $methodFilter,
                 'tag' => $tagFilter,
             ],
+        ]);
+    }
+
+    public function show(ApiRequestLog $log)
+    {
+        $responseBody = $log->response_body;
+        $formatted = null;
+        $isJson = false;
+
+        if ($responseBody !== null) {
+            $decoded = json_decode($responseBody, true);
+            if (json_last_error() === JSON_ERROR_NONE) {
+                $formatted = json_encode($decoded, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+                $isJson = true;
+            } else {
+                $formatted = $responseBody;
+            }
+        }
+
+        return response()->json([
+            'id' => $log->id,
+            'job_key' => $log->job_key,
+            'tag' => $log->tag,
+            'method' => $log->method,
+            'url' => $log->url,
+            'status_code' => $log->status_code,
+            'requested_at' => optional($log->requested_at)->toIso8601String(),
+            'is_json' => $isJson,
+            'body' => $formatted,
         ]);
     }
 }

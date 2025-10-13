@@ -25,6 +25,7 @@ Route::prefix('/')->name('admin.')->group(function () {
         Route::get('/jobs/{job}', [CronDashboardController::class, 'job'])->name('jobs.show');
         Route::get('/jobs/{job}/runs/{runId}', [CronDashboardController::class, 'run'])->name('jobs.runs.show');
         Route::get('/api-analytics', [ApiAnalyticsController::class, 'index'])->name('api-analytics.index');
+        Route::get('/api-analytics/{log}', [ApiAnalyticsController::class, 'show'])->name('api-analytics.show');
         Route::get('/emergency', [CronEmergencyController::class, 'index'])->name('emergency.index');
         Route::post('/emergency/toggle', [CronEmergencyController::class, 'toggle'])->name('emergency.toggle');
         Route::get('/settings', [SettingsController::class, 'edit'])->name('settings.edit');

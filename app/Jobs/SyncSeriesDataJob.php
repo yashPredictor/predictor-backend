@@ -437,6 +437,7 @@ class SyncSeriesDataJob implements ShouldQueue
                     }
 
                     $matchCenter = $this->fetchMatchCenterInfo($matchId);
+                    
                     if (is_array($matchCenter) && !empty($matchCenter)) {
                         $this->logger->log('match_center_enriched', 'info', "Enriched match {$matchId} with mcenter payload", [
                             'series_id' => $seriesId,

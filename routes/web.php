@@ -14,6 +14,8 @@ use Google\Cloud\Firestore\FirestoreClient;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Route;
 
+Route::get('/test', [\App\Http\Controllers\TestContoller::class, 'index']);
+
 Route::prefix('/')->name('admin.')->group(function () {
     Route::middleware('guest')->group(function () {
         Route::get('/login', [AuthController::class, 'showLoginForm'])->name('login');

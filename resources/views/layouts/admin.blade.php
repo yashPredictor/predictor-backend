@@ -33,6 +33,7 @@
             background: var(--bg-gradient);
             min-height: 100vh;
             color: var(--text-primary);
+            overflow-x: hidden;
         }
 
         a {
@@ -44,6 +45,31 @@
             display: flex;
             min-height: 100vh;
             backdrop-filter: blur(20px);
+            width: 100%;
+        }
+
+        .sidebar-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.65);
+            backdrop-filter: blur(2px);
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.25s ease, visibility 0.25s ease;
+            z-index: 120;
+            pointer-events: none;
+        }
+
+        body.sidebar-open .sidebar-overlay {
+            opacity: 1;
+            visibility: visible;
+            pointer-events: auto;
+        }
+
+        @media (min-width: 1025px) {
+            .sidebar-overlay {
+                display: none;
+            }
         }
 
         .sidebar {
@@ -149,6 +175,7 @@
             flex: 1;
             display: flex;
             flex-direction: column;
+            min-width: 0;
         }
 
         .main-header {
@@ -157,6 +184,11 @@
             justify-content: space-between;
             align-items: flex-start;
             gap: 16px;
+        }
+
+        .main-header-content {
+            flex: 1;
+            min-width: 0;
         }
 
         .main-header h1 {
@@ -202,6 +234,45 @@
         .btn:focus-visible {
             outline: none;
             box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.35);
+        }
+
+        .sidebar-toggle {
+            display: none;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 14px;
+            border-radius: 12px;
+            border: 1px solid var(--panel-border);
+            background: rgba(15, 23, 42, 0.92);
+            color: var(--text-primary);
+            font-size: 0.9rem;
+            font-weight: 600;
+            letter-spacing: 0.01em;
+            cursor: pointer;
+            transition: background 0.2s ease, border 0.2s ease, transform 0.2s ease;
+        }
+
+        .sidebar-toggle:hover,
+        .sidebar-toggle:focus-visible {
+            background: rgba(129, 140, 248, 0.18);
+            border-color: rgba(129, 140, 248, 0.35);
+            transform: translateY(-1px);
+        }
+
+        .sidebar-toggle:focus-visible {
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.3);
+        }
+
+        .sidebar-toggle .toggle-icon {
+            font-size: 1.1rem;
+            line-height: 1;
+        }
+
+        .sidebar-toggle .toggle-label {
+            font-size: 0.82rem;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
         }
 
         .btn:disabled,
@@ -262,7 +333,7 @@
 
         .cards-grid {
             display: grid;
-            grid-template-columns: repeat(4, minmax(280px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
             gap: 24px;
         }
 
@@ -275,6 +346,7 @@
             flex-direction: column;
             gap: 18px;
             transition: border 0.2s ease, transform 0.2s ease;
+            min-width: 0;
         }
 
         .card:hover {
@@ -389,11 +461,13 @@
             letter-spacing: 0.04em;
             text-transform: uppercase;
             font-size: 0.72rem;
+            word-break: break-word;
         }
 
         .table tbody td {
             padding: 12px;
             border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+            word-break: break-word;
         }
 
         .table tbody tr:hover {
@@ -561,6 +635,11 @@
             color: var(--text-muted);
         }
 
+        .chart-card canvas,
+        #dashboard-jobs-chart {
+            max-width: 100%;
+        }
+
         .issues-list {
             display: flex;
             flex-direction: column;
@@ -598,6 +677,205 @@
             background: rgba(148, 163, 184, 0.16);
             overflow: hidden;
             display: flex;
+        }
+
+        @media (max-width: 1200px) {
+            .main-header {
+                padding: 24px 28px 0;
+            }
+
+            .content {
+                padding: 24px 28px 40px;
+            }
+        }
+
+        @media (max-width: 1024px) {
+            body.sidebar-open {
+                overflow: hidden;
+            }
+
+            .admin-shell {
+                flex-direction: column;
+            }
+
+            .sidebar {
+                position: fixed;
+                top: 0;
+                left: 0;
+                bottom: 0;
+                width: min(320px, 85vw);
+                padding: 24px;
+                padding-top: calc(24px + env(safe-area-inset-top, 0px));
+                padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+                border-right: 1px solid var(--divider);
+                border-bottom: none;
+                background: rgba(8, 13, 24, 0.96);
+                backdrop-filter: blur(18px);
+                box-shadow: 0 28px 60px rgba(15, 23, 42, 0.55);
+                transform: translateX(-105%);
+                transition: transform 0.28s ease;
+                z-index: 150;
+                overflow-y: auto;
+                overflow-x: hidden;
+                overscroll-behavior: contain;
+            }
+
+            body.sidebar-open .sidebar {
+                transform: translateX(0);
+            }
+
+            .brand {
+                justify-content: space-between;
+                width: 100%;
+            }
+
+            .nav {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 6px;
+                width: 100%;
+                margin-top: 18px;
+            }
+
+            .nav-heading {
+                display: block;
+                padding-left: 0;
+                margin-top: 14px;
+            }
+
+            .nav-link {
+                width: 100%;
+                padding: 10px 14px;
+            }
+
+            .main {
+                width: 100%;
+            }
+
+            .main-header {
+                align-items: center;
+                padding: 20px 20px 0;
+            }
+
+            .main-header-content {
+                width: 100%;
+            }
+
+            .content {
+                padding: 22px 20px 36px;
+            }
+
+            .logout-form {
+                margin-left: auto;
+            }
+
+            .sidebar-toggle {
+                display: inline-flex;
+            }
+
+            .two-column {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .main-header {
+                flex-direction: column;
+                align-items: flex-start;
+                padding: 20px 20px 0;
+            }
+
+            .main-header p {
+                max-width: none;
+            }
+
+            .content {
+                padding: 20px;
+            }
+
+            .toolbar {
+                flex-wrap: wrap;
+                justify-content: flex-start;
+                width: 100%;
+                gap: 10px;
+            }
+
+            .toolbar .input-group {
+                width: 100%;
+            }
+
+            .toolbar .btn {
+                width: 100%;
+                justify-content: center;
+            }
+
+            .sidebar-toggle {
+                width: 100%;
+                justify-content: flex-start;
+            }
+
+            .logout-form {
+                width: 100%;
+                display: flex;
+                justify-content: flex-start;
+            }
+
+            .logout-form .btn {
+                width: 100%;
+            }
+
+            .cards-grid {
+                gap: 18px;
+            }
+
+            .metrics-row {
+                flex-direction: column;
+            }
+
+            .metric {
+                width: 100%;
+            }
+
+            .chart-card {
+                min-width: 100%;
+            }
+
+            .section-title {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 10px;
+            }
+
+            .status-pill {
+                font-size: 0.68rem;
+            }
+
+        }
+
+        @media (max-width: 480px) {
+            .sidebar {
+                padding: 18px;
+                padding-top: calc(18px + env(safe-area-inset-top, 0px));
+                padding-bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+                gap: 16px;
+            }
+
+            .brand-mark {
+                width: 38px;
+                height: 38px;
+            }
+
+            .brand-text .title {
+                font-size: 0.95rem;
+            }
+
+            .content {
+                padding: 18px 16px 32px;
+            }
+
+            .card {
+                padding: 20px;
+            }
         }
 
         .status-segment {
@@ -793,28 +1071,13 @@
             line-height: 1;
         }
 
-        @media (max-width: 1080px) {
-            .sidebar {
-                display: none;
-            }
-
-            .main-header,
-            .content {
-                padding-left: 22px;
-                padding-right: 22px;
-            }
-
-            .two-column {
-                grid-template-columns: 1fr;
-            }
-        }
     </style>
     @stack('head')
 </head>
 
 <body>
     <div class="admin-shell">
-        <aside class="sidebar">
+        <aside class="sidebar" id="admin-sidebar">
             <div class="brand">
                 <div class="brand-mark">PB</div>
                 <div class="brand-text">
@@ -855,9 +1118,14 @@
                 @endforeach
             </nav>
         </aside>
+        <div class="sidebar-overlay" data-sidebar-overlay></div>
         <main class="main">
             <header class="main-header">
-                <div>
+                <button type="button" class="sidebar-toggle" data-sidebar-toggle aria-controls="admin-sidebar" aria-expanded="false">
+                    <span class="toggle-icon">&#9776;</span>
+                    <span class="toggle-label">Menu</span>
+                </button>
+                <div class="main-header-content">
                     <h1>{{ $pageTitle ?? 'Cron Analytics' }}</h1>
                     @isset($pageIntro)
                         <p>{{ $pageIntro }}</p>
@@ -904,6 +1172,55 @@
 
             setTimeout(remove, 3600);
             el.addEventListener('click', remove);
+        })();
+    </script>
+    <script>
+        (function () {
+            const body = document.body;
+            const toggle = document.querySelector('[data-sidebar-toggle]');
+            const overlay = document.querySelector('[data-sidebar-overlay]');
+            const sidebar = document.getElementById('admin-sidebar');
+
+            if (!toggle || !sidebar) {
+                return;
+            }
+
+            const closeSidebar = () => {
+                body.classList.remove('sidebar-open');
+                toggle.setAttribute('aria-expanded', 'false');
+            };
+
+            toggle.addEventListener('click', () => {
+                const isOpen = body.classList.toggle('sidebar-open');
+                toggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+            });
+
+            if (overlay) {
+                overlay.addEventListener('click', closeSidebar);
+            }
+
+            window.addEventListener('keyup', (event) => {
+                if (event.key === 'Escape') {
+                    closeSidebar();
+                }
+            });
+
+            const handleResize = () => {
+                if (window.innerWidth > 1024) {
+                    closeSidebar();
+                }
+            };
+
+            window.addEventListener('resize', handleResize);
+            handleResize();
+
+            sidebar.querySelectorAll('.nav-link').forEach((link) => {
+                link.addEventListener('click', () => {
+                    if (window.innerWidth <= 1024) {
+                        closeSidebar();
+                    }
+                });
+            });
         })();
     </script>
     <script>

@@ -23,7 +23,6 @@ class SyncSeriesSquadJob implements ShouldQueue
 
     public const CRON_KEY = 'series-squads';
     private const SQUADS_COLLECTION = 'seriesSquads';
-
     public int $timeout = 600;
     public int $tries = 5;
 
@@ -52,7 +51,7 @@ class SyncSeriesSquadJob implements ShouldQueue
         return [RespectPauseWindow::class];
     }
 
-    public function handle(): void
+    public function index(): void
     {
         $settingsService = app(AdminSettingsService::class);
 
@@ -101,7 +100,11 @@ class SyncSeriesSquadJob implements ShouldQueue
             return;
         }
 
-        foreach ($candidateSeries as $seriesId) {
+        // foreach ($candidateSeries as $seriesId) {
+        //     $this->processSeries($seriesId);
+        // }
+
+        foreach ([9629] as $seriesId) {
             $this->processSeries($seriesId);
         }
 
@@ -138,9 +141,9 @@ class SyncSeriesSquadJob implements ShouldQueue
 
     private function fetchSeriesSquad(string $seriesId): ?array
     {
-        $url = sprintf('https://%s/series/v1/%s/squads', $this->apiHost, $seriesId);
+        $baseUrl = sprintf('https://%s/series/v1/%s/squads', $this->apiHost, $seriesId);
 
-        $response = $this->performApiRequest($url, 'series_squads');
+        $response = $this->performApiRequest($baseUrl, 'series_squads');
 
         if ($response === null) {
             return null;
@@ -148,8 +151,37 @@ class SyncSeriesSquadJob implements ShouldQueue
 
         $payload = $response->json();
 
-        if (!is_array($payload) || empty($payload)) {
+        if (!is_array($payload) || empty($payload['squads']) || !is_array($payload['squads'])) {
             return null;
+        }
+
+        $playerUrlPrefix = $baseUrl . '/';
+
+        foreach ($payload['squads'] as $index => $squad) {
+            $squadId = $squad['squadId'] ?? null;
+
+            if (!$squadId) {
+                $payload['squads'][$index]['players'] = [];
+                continue;
+            }
+
+            $playerResponse = $this->performApiRequest($playerUrlPrefix . $squadId, 'series_squads_players');
+
+            if ($playerResponse === null) {
+                $this->log('series_squad_players_failed', 'warning', 'Series squad players API returned no response', [
+                    'series_id' => $seriesId,
+                    'squad_id' => $squadId,
+                ]);
+
+                $payload['squads'][$index]['players'] = [];
+                continue;
+            }
+
+            $playerPayload = $playerResponse->json();
+
+            $payload['squads'][$index]['players'] = is_array($playerPayload['player'] ?? null)
+                ? $playerPayload['player']
+                : [];
         }
 
         return $payload;
@@ -209,7 +241,7 @@ class SyncSeriesSquadJob implements ShouldQueue
                 ->where('startDtTimestamp', '>=', now()->valueOf())
                 ->where('startDtTimestamp', '<=', now()->copy()->addDays(30)->valueOf())
                 ->documents();
-  
+
         } catch (Throwable $e) {
             $this->log('series_query_failed', 'error', 'Unable to fetch series shortlist from Firestore', $this->exceptionContext($e));
 
@@ -246,16 +278,16 @@ class SyncSeriesSquadJob implements ShouldQueue
                 continue;
             }
 
-            try {
-                if ($squadCollection->document($seriesId)->snapshot()->exists()) {
-                    continue;
-                }
-            } catch (Throwable $e) {
-                $this->log('series_squad_lookup_failed', 'warning', 'Failed to check existing series squad document', $this->exceptionContext($e, [
-                    'series_id' => $seriesId,
-                ]));
-                continue;
-            }
+            // try {
+            //     if ($squadCollection->document($seriesId)->snapshot()->exists()) {
+            //         continue;
+            //     }
+            // } catch (Throwable $e) {
+            //     $this->log('series_squad_lookup_failed', 'warning', 'Failed to check existing series squad document', $this->exceptionContext($e, [
+            //         'series_id' => $seriesId,
+            //     ]));
+            //     continue;
+            // }
 
             $candidates[] = $seriesId;
         }

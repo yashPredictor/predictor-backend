@@ -21,7 +21,7 @@ class SyncLiveMatchesJob implements ShouldQueue
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels, ApiLogging;
 
     public const CRON_KEY = 'live-matches';
-    
+
     public int $timeout = 600;
 
     public int $tries = 5;
@@ -217,21 +217,21 @@ class SyncLiveMatchesJob implements ShouldQueue
                 $matchDocData = $this->prepareMatchDocument($match, $preparedMatchInfo);
 
                 $matchRef = $this->firestore->collection('matches')->document($matchId);
-                $existingSnapshot = $matchRef->snapshot();
+                // $existingSnapshot = $matchRef->snapshot();
 
-                if ($existingSnapshot->exists()) {
-                    $existingData = $existingSnapshot->data();
-                    $adjustedData = $this->preserveRunProgress($matchDocData, $existingData ?? []);
+                // if ($existingSnapshot->exists()) {
+                //     $existingData = $existingSnapshot->data();
+                //     $adjustedData = $this->preserveRunProgress($matchDocData, $existingData ?? []);
 
-                    if ($adjustedData !== $matchDocData) {
-                        $this->log('match_runs_preserved', 'info', 'Retained higher run totals from existing snapshot', [
-                            'match_id' => $matchId,
-                        ]);
-                        $matchDocData = $adjustedData;
-                    }
-                }
-
-                $bulk->set($matchRef, $matchDocData, ['merge' => true]);
+                //     if ($adjustedData !== $matchDocData) {
+                //         $this->log('match_runs_preserved', 'info', 'Retained higher run totals from existing snapshot', [
+                //             'match_id' => $matchId,
+                //         ]);
+                //         $matchDocData = $adjustedData;
+                //     }
+                // }
+               
+                $bulk->set($matchRef, $matchDocData);
 
                 $synced++;
 
@@ -453,15 +453,29 @@ class SyncLiveMatchesJob implements ShouldQueue
         return $prepared;
     }
 
-    /**
-     * @param array<string, mixed> $match
-     * @param array<string, mixed> $preparedMatchInfo
-     * @return array<string, mixed>
-     */
+    public function array_change_key_case_recursive(array $array, int $case = CASE_LOWER): array
+    {
+        $result = [];
+
+        foreach ($array as $key => $value) {
+            $newKey = is_string($key)
+                ? ($case === CASE_UPPER ? strtoupper($key) : strtolower($key))
+                : $key;
+
+            if (is_array($value)) {
+                $result[$newKey] = array_change_key_case($value, $case);
+            } else {
+                $result[$newKey] = $value;
+            }
+        }
+
+        return $result;
+    }
+
     private function prepareMatchDocument(array $match, array $preparedMatchInfo): array
     {
         $document = $match;
-        $document['matchInfo'] = array_change_key_case($preparedMatchInfo, CASE_LOWER);
+        $document['matchInfo'] = $this->array_change_key_case_recursive($preparedMatchInfo, CASE_LOWER);
         $document['updatedAt'] = now()->valueOf();
 
         if (isset($preparedMatchInfo['matchId'])) {

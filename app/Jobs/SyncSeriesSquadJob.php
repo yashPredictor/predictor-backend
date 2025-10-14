@@ -51,7 +51,7 @@ class SyncSeriesSquadJob implements ShouldQueue
         return [RespectPauseWindow::class];
     }
 
-    public function index(): void
+    public function handle(): void
     {
         $settingsService = app(AdminSettingsService::class);
 
@@ -59,7 +59,7 @@ class SyncSeriesSquadJob implements ShouldQueue
             return;
         }
 
-        $this->apiHost = config('services.cricbuzz.host', 'cricbuzz-cricket2.p.rapidapi.com');
+        $this->apiHost = config('services.cricbuzz.host', '139.59.8.120:8987');
         $this->logger = new SeriesSquadSyncLogger($this->runId);
         $this->runId = $this->logger->runId;
         $this->initApiLoggingContext($this->runId, self::CRON_KEY);
@@ -100,11 +100,7 @@ class SyncSeriesSquadJob implements ShouldQueue
             return;
         }
 
-        // foreach ($candidateSeries as $seriesId) {
-        //     $this->processSeries($seriesId);
-        // }
-
-        foreach ([9629] as $seriesId) {
+        foreach ($candidateSeries as $seriesId) {
             $this->processSeries($seriesId);
         }
 
@@ -141,7 +137,7 @@ class SyncSeriesSquadJob implements ShouldQueue
 
     private function fetchSeriesSquad(string $seriesId): ?array
     {
-        $baseUrl = sprintf('https://%s/series/v1/%s/squads', $this->apiHost, $seriesId);
+        $baseUrl = sprintf('http://%s/series/v1/%s/squads', $this->apiHost, $seriesId);
 
         $response = $this->performApiRequest($baseUrl, 'series_squads');
 
@@ -179,9 +175,11 @@ class SyncSeriesSquadJob implements ShouldQueue
 
             $playerPayload = $playerResponse->json();
 
-            $payload['squads'][$index]['players'] = is_array($playerPayload['player'] ?? null)
-                ? $playerPayload['player']
-                : [];
+            $players = array_filter($playerPayload['player'] ?? [], function ($p) {
+                return empty($p['isHeader']);
+            });
+
+            $payload['squads'][$index]['players'] = array_values($players);
         }
 
         return $payload;
@@ -198,7 +196,7 @@ class SyncSeriesSquadJob implements ShouldQueue
         $this->firestore
             ->collection(self::SQUADS_COLLECTION)
             ->document($seriesId)
-            ->set($documentPayload, ['merge' => true]);
+            ->set($documentPayload);
     }
 
     private function initializeClients(): FirestoreClient
@@ -308,7 +306,7 @@ class SyncSeriesSquadJob implements ShouldQueue
         try {
             $response = Http::withHeaders([
                 'x-rapidapi-host' => $this->apiHost,
-                'x-rapidapi-key' => $this->apiKey,
+                'x-auth-user' => $this->apiKey,
             ])->get($url);
 
             $this->finalizeApiCall($callId, $response);

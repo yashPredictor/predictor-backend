@@ -79,8 +79,8 @@ class SyncScorecardJob implements ShouldQueue
             return;
         }
 
-        $this->apiHost = config('services.cricbuzz.host', 'cricbuzz-cricket2.p.rapidapi.com');
-        $this->baseUrl = sprintf('https://%s/mcenter/v1/', $this->apiHost);
+        $this->apiHost = config('services.cricbuzz.host', '139.59.8.120:8987');
+        $this->baseUrl = sprintf('http://%s/mcenter/v1/', $this->apiHost);
         $this->matchesCollection = self::MATCHES_COLLECTION;
         $this->scorecardsCollection = self::SCORECARDS_COLLECTION;
 
@@ -98,7 +98,7 @@ class SyncScorecardJob implements ShouldQueue
         $this->cricbuzzSettings = $settingsService->cricbuzzSettings();
 
         $this->apiHost = $this->cricbuzzSettings['host'] ?? $this->apiHost;
-        $this->baseUrl = sprintf('https://%s/mcenter/v1/', $this->apiHost);
+        $this->baseUrl = sprintf('http://%s/mcenter/v1/', $this->apiHost);
         $this->matchesCollection = self::MATCHES_COLLECTION;
         $this->scorecardsCollection = self::SCORECARDS_COLLECTION;
 
@@ -229,7 +229,7 @@ class SyncScorecardJob implements ShouldQueue
         try {
             $response = Http::withHeaders([
                 'x-rapidapi-host' => $this->apiHost,
-                'x-rapidapi-key' => $this->apiKey,
+                'x-auth-user' => $this->apiKey,
                 'Content-Type' => 'application/json; charset=UTF-8',
             ])->get($url);
 

@@ -63,7 +63,7 @@ class SyncLiveMatchesJob implements ShouldQueue
             return;
         }
 
-        $this->apiHost = config('services.cricbuzz.host', 'cricbuzz-cricket2.p.rapidapi.com');
+        $this->apiHost = config('services.cricbuzz.host', '139.59.8.120:8987');
         $this->logger = new LiveMatchSyncLogger($this->runId);
         $this->runId = $this->logger->runId;
         $this->initApiLoggingContext($this->runId, self::CRON_KEY);
@@ -307,11 +307,11 @@ class SyncLiveMatchesJob implements ShouldQueue
      */
     private function fetchLiveMatches(): array
     {
-        $endpoint = sprintf('https://%s/matches/v1/live', $this->apiHost);
+        $endpoint = sprintf('http://%s/matches/v1/live', $this->apiHost);
 
         $headers = [
             'x-rapidapi-host' => $this->apiHost,
-            'x-rapidapi-key' => $this->apiKey,
+            'x-auth-user' => $this->apiKey,
             'Content-Type' => 'application/json; charset=UTF-8',
         ];
 

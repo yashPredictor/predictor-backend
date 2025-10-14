@@ -67,8 +67,8 @@ class SyncCommentaryJob implements ShouldQueue
             return;
         }
 
-        $this->apiHost = config('services.cricbuzz.host', 'cricbuzz-cricket2.p.rapidapi.com');
-        $this->baseUrl = sprintf('https://%s/mcenter/v1/', $this->apiHost);
+        $this->apiHost = config('services.cricbuzz.host', '139.59.8.120:8987');
+        $this->baseUrl = sprintf('http://%s/mcenter/v1/', $this->apiHost);
         $this->logger = new CommentarySyncLogger($this->runId);
         $this->runId = $this->logger->runId;
         $this->initApiLoggingContext($this->runId, self::CRON_KEY);
@@ -83,7 +83,7 @@ class SyncCommentaryJob implements ShouldQueue
         $this->cricbuzzSettings = $settingsService->cricbuzzSettings();
 
         $this->apiHost = $this->cricbuzzSettings['host'] ?? $this->apiHost;
-        $this->baseUrl = sprintf('https://%s/mcenter/v1/', $this->apiHost);
+        $this->baseUrl = sprintf('http://%s/mcenter/v1/', $this->apiHost);
 
         try {
             $this->firestore = $this->initializeClients();
@@ -331,7 +331,7 @@ class SyncCommentaryJob implements ShouldQueue
     {
         return [
             'x-rapidapi-host' => $this->apiHost,
-            'x-rapidapi-key' => $this->apiKey,
+            'x-auth-user' => $this->apiKey,
             'Content-Type' => 'application/json; charset=UTF-8',
         ];
     }

@@ -29,12 +29,12 @@ return Application::configure(basePath: dirname(__DIR__))
         $shouldRun = static fn(): bool => !app(PauseWindowService::class)->isPaused();
 
         $schedule->job(new SyncLiveMatchesJob())
-            ->everyThirtySeconds()
+            ->everyFifteenSeconds()
             ->withoutOverlapping()
             ->when($shouldRun);
 
         $schedule->job(new SyncMatchOversJob())
-            ->everyThirtySeconds()
+            ->everyFifteenSeconds()
             ->withoutOverlapping()
             ->when($shouldRun);
 
@@ -44,12 +44,12 @@ return Application::configure(basePath: dirname(__DIR__))
             ->when($shouldRun);
 
         $schedule->job(new SyncScorecardJob())
-            ->everyThirtySeconds()
+            ->everyFifteenSeconds()
             ->withoutOverlapping()
             ->when($shouldRun);
 
         $schedule->job(new SyncCommentary())
-            ->everyThirtySeconds()
+            ->everyFifteenSeconds()
             ->withoutOverlapping()
             ->when($shouldRun);
 

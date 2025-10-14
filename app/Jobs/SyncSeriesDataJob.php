@@ -81,7 +81,7 @@ class SyncSeriesDataJob implements ShouldQueue
             return;
         }
 
-        $this->apiHost = config('services.cricbuzz.host', 'cricbuzz-cricket2.p.rapidapi.com');
+        $this->apiHost = config('services.cricbuzz.host', '139.59.8.120:8987');
         $this->logger = new SeriesSyncLogger($this->runId);
         $this->runId = $this->logger->runId;
         $this->initApiLoggingContext($this->runId, self::CRON_KEY);
@@ -95,8 +95,8 @@ class SyncSeriesDataJob implements ShouldQueue
         $this->cricbuzzSettings = $settingsService->cricbuzzSettings();
 
         $this->apiHost = $this->cricbuzzSettings['host'] ?? $this->apiHost;
-        $this->seriesBaseUrl = sprintf('https://%s/%s', $this->apiHost, self::SERIES_ENDPOINT);
-        $this->matchCenterBaseUrl = sprintf('https://%s/%s', $this->apiHost, self::MATCH_CENTER_PATH);
+        $this->seriesBaseUrl = sprintf('http://%s/%s', $this->apiHost, self::SERIES_ENDPOINT);
+        $this->matchCenterBaseUrl = sprintf('http://%s/%s', $this->apiHost, self::MATCH_CENTER_PATH);
 
         try {
             $this->firestore = $this->initializeClients();
@@ -610,7 +610,7 @@ class SyncSeriesDataJob implements ShouldQueue
         try {
             $response = Http::withHeaders([
                 'x-rapidapi-host' => $this->apiHost,
-                'x-rapidapi-key' => $this->apiKey,
+                'x-auth-user' => $this->apiKey,
             ])->get($url);
 
             $this->finalizeApiCall($callId, $response);

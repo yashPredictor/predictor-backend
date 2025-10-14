@@ -231,7 +231,7 @@ class SyncLiveMatchesJob implements ShouldQueue
                 //     }
                 // }
                
-                $bulk->set($matchRef, $matchDocData);
+                $bulk->set($matchRef, $matchDocData, ['merge' => true]);
 
                 $synced++;
 

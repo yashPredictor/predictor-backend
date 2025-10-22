@@ -199,7 +199,6 @@ class SyncSquadJob implements ShouldQueue
             return false;
         }
 
-        $payload = $this->normalizeSquadPayload($payload);
         $seriesPoints = $this->extractSeriesPoints($payload);
         $payload = $this->appendFantasyStatsToPayload($payload, $seriesPoints);
         
@@ -467,11 +466,7 @@ class SyncSquadJob implements ShouldQueue
 
     private function appendFantasyStatsToPayload(array $payload, array $seriesPoints): array
     {
-        if (!isset($payload['squads']) || !is_array($payload['squads'])) {
-            return $payload;
-        }
-
-        foreach ($payload['squads'] as $teamKey => $teamBlock) {
+        foreach ($payload as $teamKey => $teamBlock) {
             if (!is_array($teamBlock)) {
                 continue;
             }
@@ -502,45 +497,7 @@ class SyncSquadJob implements ShouldQueue
                 $players[$index] = $this->mergeFantasyStats($playerGroup, $seriesPoints);
             }
 
-            $payload['squads'][$teamKey]['players'] = $players;
-        }
-
-        return $payload;
-    }
-
-    private function normalizeSquadPayload(array $payload): array
-    {
-        $squads = [];
-
-        if (isset($payload['squads']) && is_array($payload['squads'])) {
-            $squads = $payload['squads'];
-        } else {
-            foreach ($payload as $key => $value) {
-                if (!is_array($value)) {
-                    continue;
-                }
-
-                if (preg_match('/^team\d+$/i', (string) $key)) {
-                    $squads[$key] = $value;
-                    unset($payload[$key]);
-                }
-            }
-        }
-
-        foreach ($squads as $teamKey => $teamBlock) {
-            if (!is_array($teamBlock)) {
-                continue;
-            }
-
-            if (!isset($teamBlock['players']) || !is_array($teamBlock['players'])) {
-                $teamBlock['players'] = [];
-            }
-
-            $squads[$teamKey] = $teamBlock;
-        }
-
-        if (!empty($squads)) {
-            $payload['squads'] = $squads;
+            $payload[$teamKey]['players'] = $players;
         }
 
         return $payload;

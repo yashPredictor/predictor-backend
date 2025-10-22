@@ -12,7 +12,7 @@ class AdminSettingsService
     private const CRICBUZZ_KEY      = 'integrations.cricbuzz';
     private const FIRESTORE_KEY     = 'integrations.firestore';
     private const CRON_TOGGLES_KEY  = 'cron_toggles';
-    private const MIN_RETENTION_DAYS = 5;
+    private const MIN_RETENTION_DAYS = 3;
 
     public function __construct(private readonly CacheManager $cache)
     {

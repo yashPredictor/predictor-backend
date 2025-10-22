@@ -32,7 +32,7 @@ class MaintenanceController extends Controller
     public function updateLogRetention(Request $request, AdminSettingsService $settings): RedirectResponse
     {
         $validated = $request->validate([
-            'days' => ['required', 'integer', 'min:5', 'max:365'],
+            'days' => ['required', 'integer', 'min:3', 'max:365'],
         ]);
 
         $settings->updateLogRetentionDays((int) $validated['days']);

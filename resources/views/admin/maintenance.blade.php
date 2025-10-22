@@ -16,7 +16,7 @@
             @method('PUT')
             <label class="form-control" style="display: flex; flex-direction: column; gap: 8px;">
                 <span class="stat-label">Retention interval (days)</span>
-                <input type="number" name="days" min="5" max="365" value="{{ old('days', $logRetentionDays) }}" required>
+                <input type="number" name="days" min="3" max="365" value="{{ old('days', $logRetentionDays) }}" required>
                 @error('days')
                     <span style="color: var(--error); font-size: 0.75rem;">{{ $message }}</span>
                 @enderror

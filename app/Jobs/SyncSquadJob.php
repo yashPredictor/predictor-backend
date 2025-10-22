@@ -21,7 +21,7 @@ class SyncSquadJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels, ApiLogging;
 
-    private const SQUAD_STALE_AFTER_MS = 600_000;
+    private const SQUAD_STALE_AFTER_MS = 0;
     private const ALLOWED_STATES = ['preview', 'upcoming'];
     public const CRON_KEY = 'squads';
     private const MATCHES_COLLECTION = 'matches';
@@ -199,6 +199,10 @@ class SyncSquadJob implements ShouldQueue
             return false;
         }
 
+        $payload = $this->normalizeSquadPayload($payload);
+        $seriesPoints = $this->extractSeriesPoints($payload);
+        $payload = $this->appendFantasyStatsToPayload($payload, $seriesPoints);
+        
         $documentPayload = array_merge($payload, [
             'lastFetched' => now()->valueOf(),
             'serverTime' => now()->toIso8601String(),
@@ -222,6 +226,8 @@ class SyncSquadJob implements ShouldQueue
                 'x-rapidapi-host' => $this->apiHost,
                 'x-auth-user' => $this->apiKey,
                 'Content-Type' => 'application/json; charset=UTF-8',
+                'no-cache' => 'true',
+                'Cache-Control' => 'no-cache',
             ])->get($url);
 
             $this->finalizeApiCall($callId, $response);
@@ -421,5 +427,213 @@ class SyncSquadJob implements ShouldQueue
         }
 
         $this->logger->log($action, $status, $message, $context);
+    }
+
+    /**
+     * @return array<string, float>
+     */
+    private function extractSeriesPoints(array $payload): array
+    {
+        $seriesPoints = data_get($payload, 'seriesPoints', []);
+        if (!is_array($seriesPoints)) {
+            return [];
+        }
+
+        $pointsIndex = [];
+
+        $walker = static function ($item) use (&$walker, &$pointsIndex): void {
+            if (!is_array($item)) {
+                return;
+            }
+
+            $playerId = $item['playerId'] ?? $item['player_id'] ?? $item['id'] ?? null;
+            $points = $item['points'] ?? $item['point'] ?? $item['totalPoints'] ?? $item['fantasyPoints'] ?? null;
+
+            if ($playerId !== null && is_numeric($points)) {
+                $pointsIndex[(string) $playerId] = (float) $points;
+            }
+
+            foreach ($item as $value) {
+                if (is_array($value)) {
+                    $walker($value);
+                }
+            }
+        };
+
+        $walker($seriesPoints);
+
+        return $pointsIndex;
+    }
+
+    private function appendFantasyStatsToPayload(array $payload, array $seriesPoints): array
+    {
+        if (!isset($payload['squads']) || !is_array($payload['squads'])) {
+            return $payload;
+        }
+
+        foreach ($payload['squads'] as $teamKey => $teamBlock) {
+            if (!is_array($teamBlock)) {
+                continue;
+            }
+
+            $players = $teamBlock['players'] ?? null;
+            if (!is_array($players)) {
+                continue;
+            }
+
+            foreach ($players as $index => $playerGroup) {
+                if (!is_array($playerGroup)) {
+                    continue;
+                }
+
+                $category = strtolower((string) ($playerGroup['category'] ?? ''));
+                if ($category !== '' && $category !== 'squad') {
+                    $players[$index] = $playerGroup;
+                    continue;
+                }
+
+                $playerList = data_get($playerGroup, 'player');
+                if (is_array($playerList)) {
+                    $playerGroup['player'] = $this->mapFantasyStatsOntoPlayers($playerList, $seriesPoints);
+                    $players[$index] = $playerGroup;
+                    continue;
+                }
+
+                $players[$index] = $this->mergeFantasyStats($playerGroup, $seriesPoints);
+            }
+
+            $payload['squads'][$teamKey]['players'] = $players;
+        }
+
+        return $payload;
+    }
+
+    private function normalizeSquadPayload(array $payload): array
+    {
+        $squads = [];
+
+        if (isset($payload['squads']) && is_array($payload['squads'])) {
+            $squads = $payload['squads'];
+        } else {
+            foreach ($payload as $key => $value) {
+                if (!is_array($value)) {
+                    continue;
+                }
+
+                if (preg_match('/^team\d+$/i', (string) $key)) {
+                    $squads[$key] = $value;
+                    unset($payload[$key]);
+                }
+            }
+        }
+
+        foreach ($squads as $teamKey => $teamBlock) {
+            if (!is_array($teamBlock)) {
+                continue;
+            }
+
+            if (!isset($teamBlock['players']) || !is_array($teamBlock['players'])) {
+                $teamBlock['players'] = [];
+            }
+
+            $squads[$teamKey] = $teamBlock;
+        }
+
+        if (!empty($squads)) {
+            $payload['squads'] = $squads;
+        }
+
+        return $payload;
+    }
+
+    private function mapFantasyStatsOntoPlayers(array $players, array $seriesPoints): array
+    {
+        foreach ($players as $key => $player) {
+            if (!is_array($player)) {
+                continue;
+            }
+
+            $players[$key] = $this->mergeFantasyStats($player, $seriesPoints);
+        }
+
+        return $players;
+    }
+
+    private function mergeFantasyStats(array $player, array $seriesPoints): array
+    {
+        $fantasyStats = $this->generateFantasyStats($player, $seriesPoints);
+
+        return array_merge($player, $fantasyStats);
+    }
+
+    public function generateFantasyStats(array $player, array $seriesPoints): array
+    {
+        $randFloat = static fn (): float => mt_rand() / mt_getrandmax();
+
+        $role = strtoupper($player['role'] ?? '');
+        $role = $this->normalizeRole($role);
+        $baseCredits = 8.5;
+        $selBy = 15 + $randFloat() * 50;
+
+        switch ($role) {
+            case 'BAT':
+                $baseCredits = 9.0;
+                $selBy += 10;
+                break;
+            case 'BOWL':
+                $baseCredits = 8.5;
+                $selBy += 5;
+                break;
+            case 'AR':
+                $baseCredits = 9.5;
+                $selBy += 15;
+                break;
+            case 'WK':
+                $baseCredits = 8.5;
+                $selBy += 5;
+                break;
+        }
+
+        $team = mb_strtolower($player['teamName'] ?? $player['teamname'] ?? '');
+        if (str_contains($team, 'india') || str_contains($team, 'australia') || str_contains($team, 'england')) {
+            $baseCredits += 0.5;
+        }
+
+        $credits = $baseCredits + ($randFloat() * 1.0 - 0.5);
+        $credits = max(6.0, min(10.0, $credits));
+
+        $points = (float)($seriesPoints[$player['id'] ?? ''] ?? 0.0);
+
+        return [
+            'credits' => (int) number_format($credits, 1),
+            'points'  => $points,
+        ];
+    }
+
+    private function normalizeRole(string $role): string
+    {
+        $role = trim($role);
+
+        if ($role === '') {
+            return $role;
+        }
+
+        if (str_contains($role, 'ALLROUND')) {
+            return 'AR';
+        }
+
+        if (str_contains($role, 'WK')) {
+            return 'WK';
+        }
+
+        if (str_contains($role, 'BOWL')) {
+            return 'BOWL';
+        }
+
+        if (str_contains($role, 'BAT')) {
+            return 'BAT';
+        }
+
+        return $role;
     }
 }

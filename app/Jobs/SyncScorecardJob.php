@@ -44,8 +44,11 @@ class SyncScorecardJob implements ShouldQueue
         "live",
         "current",
         "progress",
+        "inprogress",
         "in progress",
         "inning break",
+        "rain",
+        "lunch"
     ];
 
     /** @var string[] */

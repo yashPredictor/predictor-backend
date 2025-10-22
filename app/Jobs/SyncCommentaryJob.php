@@ -27,9 +27,14 @@ class SyncCommentaryJob implements ShouldQueue
 
     /** @var string[] */
     private array $liveStates = [
-        'live',
-        'inprogress',
-        'in progress',
+        "live",
+        "current",
+        "progress",
+        "inprogress",
+        "in progress",
+        "inning break",
+        "rain",
+        "lunch"
     ];
 
     public int $timeout = 600;

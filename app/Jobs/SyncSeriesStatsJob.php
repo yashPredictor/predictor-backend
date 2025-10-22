@@ -576,6 +576,8 @@ class SyncSeriesStatsJob implements ShouldQueue
             'x-rapidapi-host' => $this->apiHost,
             'x-auth-user' => $this->apiKey,
             'Content-Type' => 'application/json; charset=UTF-8',
+            'no-cache' => 'true',
+            'Cache-Control' => 'no-cache',
         ];
     }
 

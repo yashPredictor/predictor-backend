@@ -562,7 +562,7 @@ class SyncSquadJob implements ShouldQueue
         $points = (float)($seriesPoints[$player['id'] ?? ''] ?? 0.0);
 
         return [
-            'credits' => (int) number_format($credits, 1),
+            'credits' => (float) number_format($credits, 2),
             'points'  => $points,
         ];
     }

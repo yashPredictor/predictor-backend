@@ -282,11 +282,7 @@ class SyncSquadJob implements ShouldQueue
         $windowEnd = $now->copy()->addDay()->valueOf();
 
         if (!empty($this->matchIds)) {
-            return $this->filterMatchIdsByWindow(
-                array_values(array_unique(array_map(static fn($id) => (string) $id, $this->matchIds))),
-                $windowStart,
-                $windowEnd
-            );
+            return array_values(array_unique(array_map(static fn($id) => (string) $id, $this->matchIds)));
         }
 
         if (!$this->firestore) {

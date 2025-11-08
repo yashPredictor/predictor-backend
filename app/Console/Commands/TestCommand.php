@@ -5444,11 +5444,6 @@ class TestCommand extends Command
                 'status' => $response->status(),
             ]);
             return null;
-            throw new \RuntimeException(sprintf(
-                'HTTP %s: %s',
-                $response->status(),
-                $response->body()
-            ));
         }
 
         $payload = $response->json();

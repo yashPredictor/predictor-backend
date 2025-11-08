@@ -605,6 +605,7 @@ class SyncSeriesDataJob implements ShouldQueue
 
     private function makeApiRequest(string $url, string $action)
     {
+        $url .= (str_contains($url, '?') ? '&' : '?') . 'uq=' . bin2hex(random_bytes(8));
         $callId = $this->recordApiCall($url, 'GET', $action);
 
         try {

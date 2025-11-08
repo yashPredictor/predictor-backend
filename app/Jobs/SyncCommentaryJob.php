@@ -23,6 +23,7 @@ class SyncCommentaryJob implements ShouldQueue
 
     public const CRON_KEY = 'commentary';
     private const MATCHES_COLLECTION = 'matches';
+    private const RECENT_COMPLETE_WINDOW_MS = 600_000;
     private const COMMENTARY_COLLECTION = 'commentary';
 
     /** @var string[] */
@@ -136,7 +137,7 @@ class SyncCommentaryJob implements ShouldQueue
                 $responses = Http::pool(function (Pool $pool) use ($chunk, $headers, &$callIds) {
                     $requests = [];
                     foreach ($chunk as $matchId) {
-                        $url = $this->baseUrl . $matchId . '/comm';
+                        $url = $this->baseUrl . $matchId . '/comm?uq=' . bin2hex(random_bytes(8));
                         $callIds[$matchId] = $this->recordApiCall($url, 'GET', 'commentary_' . $matchId);
                         $requests[] = $pool
                             ->withHeaders($headers)
@@ -281,10 +282,42 @@ class SyncCommentaryJob implements ShouldQueue
                 continue;
             }
 
-            $ids[] = $snapshot->id();
+            $ids[] = (string) $snapshot->id();
         }
 
-        return array_values(array_unique($ids));
+        $recentCompleteCutoff = now()->valueOf() - self::RECENT_COMPLETE_WINDOW_MS;
+
+        try {
+            $recentQuery = $this->firestore
+                ->collection(self::MATCHES_COLLECTION)
+                ->where('matchInfo.state_lowercase', '==', 'complete')
+                ->where('matchInfo.enddate', '>=', $recentCompleteCutoff);
+
+            $recentDocuments = $recentQuery->documents();
+        } catch (Throwable $e) {
+            $this->log('recent_complete_query_failed', 'error', 'Failed to query recently completed matches from Firestore', $this->exceptionContext($e, [
+                'cutoff' => $recentCompleteCutoff,
+            ]));
+            $recentDocuments = [];
+        }
+
+        foreach ($recentDocuments as $snapshot) {
+            if (!$snapshot->exists()) {
+                continue;
+            }
+
+            $ids[] = (string) $snapshot->id();
+        }
+
+        $resolved = array_values(array_unique($ids));
+
+        $this->log('match_ids_discovered', 'info', 'Discovered match IDs from Firestore', [
+            'match_ids' => $resolved,
+            'match_count' => count($resolved),
+            'recent_complete_cutoff' => $recentCompleteCutoff,
+        ]);
+
+        return $resolved;
     }
 
     private function persistCommentary(string $matchId, array $commentaryData): void

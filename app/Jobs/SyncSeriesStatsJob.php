@@ -474,7 +474,7 @@ class SyncSeriesStatsJob implements ShouldQueue
                     $requests = [];
                     foreach ($typeChunk as $type) {
                         $value = $type['value'];
-                        $url = $this->statsBaseUrl . $seriesId;
+                        $url = $this->statsBaseUrl . $seriesId . '?uq=' . bin2hex(random_bytes(8));
                         $query = ['statsType' => $value];
                         $callIds[$value] = $this->recordApiCall($url, 'GET', 'series_stats_' . $value);
                         $requests[] = $pool

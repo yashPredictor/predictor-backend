@@ -269,7 +269,7 @@ class SyncSeriesVenuesJob implements ShouldQueue
 
     private function syncSeriesVenues(string $seriesId, array $headers): bool
     {
-        $url = $this->baseUrl . $seriesId . '/venues';
+        $url = $this->baseUrl . $seriesId . '/venues?uq=' . bin2hex(random_bytes(8));
         $callId = $this->recordApiCall($url, 'GET', 'series_venues');
 
         try {

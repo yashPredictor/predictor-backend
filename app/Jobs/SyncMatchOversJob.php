@@ -22,6 +22,9 @@ class SyncMatchOversJob implements ShouldQueue
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels, ApiLogging;
 
     public const CRON_KEY = 'match-overs';
+    private const MATCHES_COLLECTION = 'matches';
+    private const RECENT_COMPLETE_WINDOW_MS = 600_000;
+
     public int $timeout = 600;
     public int $tries = 5;
 
@@ -142,7 +145,7 @@ class SyncMatchOversJob implements ShouldQueue
                 $responses = Http::pool(function (Pool $pool) use ($chunk, $headers, &$callIds) {
                     $requests = [];
                     foreach ($chunk as $matchId) {
-                        $url = $this->baseUrl . $matchId . '/overs';
+                        $url = $this->baseUrl . $matchId . '/overs?uq=' . bin2hex(random_bytes(8));
                         $callIds[$matchId] = $this->recordApiCall($url, 'GET', 'match_overs');
                         $requests[] = $pool->withHeaders($headers)->get($url);
                     }
@@ -340,7 +343,7 @@ class SyncMatchOversJob implements ShouldQueue
 
         try {
             $query = $this->firestore
-                ->collection('matches')
+                ->collection(self::MATCHES_COLLECTION)
                 ->where('matchInfo.state_lowercase', 'in', array_slice($this->liveStates, 0, 10));
 
             $documents = $query->documents();
@@ -355,16 +358,41 @@ class SyncMatchOversJob implements ShouldQueue
                 continue;
             }
 
-            $ids[] = $snapshot->id();
+            $ids[] = (string) $snapshot->id();
         }
-        $discovered = array_values(array_unique($ids));
+        $recentCompleteCutoff = now()->valueOf() - self::RECENT_COMPLETE_WINDOW_MS;
+
+        try {
+            $recentQuery = $this->firestore
+                ->collection(self::MATCHES_COLLECTION)
+                ->where('matchInfo.state_lowercase', '==', 'complete')
+                ->where('matchInfo.enddate', '>=', $recentCompleteCutoff);
+
+            $recentDocuments = $recentQuery->documents();
+        } catch (Throwable $e) {
+            $this->log('recent_complete_query_failed', 'error', 'Failed to query recently completed matches from Firestore', $this->exceptionContext($e, [
+                'cutoff' => $recentCompleteCutoff,
+            ]));
+            $recentDocuments = [];
+        }
+
+        foreach ($recentDocuments as $snapshot) {
+            if (!$snapshot->exists()) {
+                continue;
+            }
+
+            $ids[] = (string) $snapshot->id();
+        }
+
+        $resolved = array_values(array_unique($ids));
 
         $this->log('match_ids_discovered', 'info', 'Discovered match IDs from Firestore', [
-            'match_ids' => $discovered,
-            'match_count' => count($discovered),
+            'match_ids' => $resolved,
+            'match_count' => count($resolved),
+            'recent_complete_cutoff' => $recentCompleteCutoff,
         ]);
 
-        return $discovered;
+        return $resolved;
     }
 
     /**
@@ -406,7 +434,7 @@ class SyncMatchOversJob implements ShouldQueue
         $this->logger->log($action, $status, $message, $context);
     }
 
-    
+
     private function preserveRunProgress(array $latest, array $existing): array
     {
         // $maxStep = 15;
@@ -431,4 +459,49 @@ class SyncMatchOversJob implements ShouldQueue
 
         return $latest;
     }
+
+    // private function preserveRunProgress(array $latest, array $existing): array
+    // {
+    //     $latestInnings = data_get($latest, 'miniscore.inningsscores.inningsscore');
+    //     $existingInnings = data_get($existing, 'miniscore.inningsscores.inningsscore');
+
+    //     if (!is_array($latestInnings) || !is_array($existingInnings)) {
+    //         return $latest;
+    //     }
+
+    //     // map existing by inningsid
+    //     $existingById = [];
+    //     foreach ($existingInnings as $ei) {
+    //         if (isset($ei['inningsid'])) {
+    //             $existingById[(string) $ei['inningsid']] = $ei;
+    //         }
+    //     }
+
+    //     foreach ($latestInnings as $i => $li) {
+    //         $inningsId = (string) ($li['inningsid'] ?? '');
+    //         if (!$inningsId || !isset($existingById[$inningsId]))
+    //             continue;
+
+    //         $old = $existingById[$inningsId]['runs'] ?? null;
+    //         $new = $li['runs'] ?? null;
+
+    //         if (!is_numeric($old) || !is_numeric($new))
+    //             continue; // <- important
+
+    //         $oldRuns = (int) $old;
+    //         $newRuns = (int) $new;
+
+    //         if ($newRuns < $oldRuns) {
+    //             $latest['miniscore']['inningsscores']['inningsscore'][$i]['runs'] = $oldRuns;
+    //             $this->log('overs_runs_preserved', 'info', 'No-drop rule applied', [
+    //                 'inningsid' => $inningsId,
+    //                 'old_runs' => $oldRuns,
+    //                 'incoming_runs' => $newRuns,
+    //                 'kept_runs' => $oldRuns,
+    //             ]);
+    //         }
+    //     }
+
+    //     return $latest;
+    // }
 }

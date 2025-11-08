@@ -162,7 +162,7 @@ class SyncSquadsPlayingXIIJob implements ShouldQueue
             ]));
         }
 
-        $url = $this->baseUrl . $matchId . '/teams';
+        $url = $this->baseUrl . $matchId . '/teams?uq=' . bin2hex(random_bytes(8));
         $response = $this->performApiRequest($url, 'squads');
 
         if ($response === null) {

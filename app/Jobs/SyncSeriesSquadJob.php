@@ -301,6 +301,7 @@ class SyncSeriesSquadJob implements ShouldQueue
 
     private function performApiRequest(string $url, string $tag)
     {
+        $url .= (str_contains($url, '?') ? '&' : '?') . 'uq=' . bin2hex(random_bytes(8));
         $callId = $this->recordApiCall($url, 'GET', $tag);
 
         try {

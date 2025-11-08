@@ -20,7 +20,8 @@ class SyncScorecardJob implements ShouldQueue
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels, ApiLogging;
 
     public const CRON_KEY = 'scorecards';
-    private const SCORECARD_STALE_AFTER_MS = 60_000;
+    private const SCORECARD_STALE_AFTER_MS = 0;
+    private const RECENT_COMPLETE_WINDOW_MS = 600_000;
     private const MATCHES_COLLECTION = 'matches';
     private const SCORECARDS_COLLECTION = 'scorecards';
 
@@ -190,7 +191,7 @@ class SyncScorecardJob implements ShouldQueue
             return false;
         }
 
-        $url = $this->baseUrl . $matchId . '/scard';
+        $url = $this->baseUrl . $matchId . '/scard?uq=' . bin2hex(random_bytes(8));
         $response = $this->performApiRequest($url, 'scorecard');
 
         if ($response === null) {
@@ -322,11 +323,36 @@ class SyncScorecardJob implements ShouldQueue
             $ids[] = (string) $snapshot->id();
         }
 
+        $recentCompleteCutoff = now()->valueOf() - self::RECENT_COMPLETE_WINDOW_MS;
+
+        try {
+            $recentQuery = $this->firestore
+                ->collection($this->matchesCollection)
+                ->where('matchInfo.state_lowercase', '==', 'complete')
+                ->where('matchInfo.enddate', '>=', $recentCompleteCutoff);
+
+            $recentDocuments = $recentQuery->documents();
+        } catch (Throwable $e) {
+            $this->log('recent_complete_query_failed', 'error', 'Failed to query recently completed matches from Firestore', $this->exceptionContext($e, [
+                'cutoff' => $recentCompleteCutoff,
+            ]));
+            $recentDocuments = [];
+        }
+
+        foreach ($recentDocuments as $snapshot) {
+            if (!$snapshot->exists()) {
+                continue;
+            }
+
+            $ids[] = (string) $snapshot->id();
+        }
+
         $resolved = array_values(array_unique($ids));
 
         $this->log('match_ids_discovered', 'info', 'Discovered match IDs from Firestore', [
             'match_ids' => $resolved,
             'match_count' => count($resolved),
+            'recent_complete_cutoff' => $recentCompleteCutoff,
         ]);
 
         return $resolved;

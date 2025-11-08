@@ -14,6 +14,7 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Throwable;
 
 class SyncLiveMatchesJob implements ShouldQueue
@@ -230,7 +231,7 @@ class SyncLiveMatchesJob implements ShouldQueue
                 //         $matchDocData = $adjustedData;
                 //     }
                 // }
-               
+
                 $bulk->set($matchRef, $matchDocData, ['merge' => true]);
 
                 $synced++;
@@ -307,8 +308,10 @@ class SyncLiveMatchesJob implements ShouldQueue
      */
     private function fetchLiveMatches(): array
     {
-        $endpoint = sprintf('http://%s/matches/v1/live', $this->apiHost);
-
+        $base = sprintf('http://%s/matches/v1/live', $this->apiHost);
+        $qs = http_build_query(['uq' => bin2hex(random_bytes(8))]);
+        $endpoint = "{$base}?{$qs}";
+        
         $headers = [
             'x-rapidapi-host' => $this->apiHost,
             'x-auth-user' => $this->apiKey,
@@ -622,25 +625,102 @@ class SyncLiveMatchesJob implements ShouldQueue
         $this->logger->log($action, $status, $message, $context);
     }
 
-    /**
-     * @param array<string, mixed> $latest
-     * @param array<string, mixed> $existing
-     */
-    private function preserveRunProgress(array $latest, array $existing): array
-    {
-        // foreach ($latest as $key => $value) {
-        //     if ($key === 'runs' && isset($existing[$key]) && is_numeric($existing[$key]) && is_numeric($value)) {
-        //         if ((float) $value < (float) $existing[$key]) {
-        //             $latest[$key] = $existing[$key];
-        //         }
-        //         continue;
-        //     }
+    // private function preserveRunProgress(array $latest, array $existing): array
+    // {
+    //     $teams = ['team1Score', 'team2Score'];
 
-        //     if (is_array($value) && isset($existing[$key]) && is_array($existing[$key])) {
-        //         $latest[$key] = $this->preserveRunProgress($value, $existing[$key]);
-        //     }
-        // }
+    //     foreach ($teams as $teamKey) {
+    //         $latestTeam = data_get($latest, "matchScore.$teamKey");
+    //         $existingTeam = data_get($existing, "matchScore.$teamKey");
 
-        return $latest;
-    }
+    //         if (!is_array($latestTeam) || !is_array($existingTeam)) {
+    //             continue;
+    //         }
+
+    //         foreach ($latestTeam as $inningsKey => $inningsLatest) {
+    //             if (!is_array($inningsLatest))
+    //                 continue;
+
+    //             $oldRuns = data_get($existingTeam, "$inningsKey.runs");
+    //             $newRuns = data_get($latestTeam, "$inningsKey.runs");
+
+    //             if (is_numeric($oldRuns) && is_numeric($newRuns) && (int) $newRuns < (int) $oldRuns) {
+    //                 data_set($latest, "matchScore.$teamKey.$inningsKey.runs", (int) $oldRuns);
+
+    //                 $this->log('matchscore_runs_preserved', 'info', 'No-drop clamp on matchScore', [
+    //                     'teamKey' => $teamKey,
+    //                     'inningsKey' => $inningsKey,
+    //                     'old_runs' => (int) $oldRuns,
+    //                     'incoming' => (int) $newRuns,
+    //                     'final_runs' => (int) $oldRuns,
+    //                 ]);
+    //             }
+    //         }
+    //     }
+
+    //     return $latest;
+    // }
+
+    // private function preserveRunProgress(array $latest, array $existing): array
+    // {
+    //     foreach (['team1Score', 'team2Score'] as $teamKey) {
+    //         $latestTeam = data_get($latest, "matchScore.$teamKey");
+    //         $existingTeam = data_get($existing, "matchScore.$teamKey");
+
+    //         if (!is_array($latestTeam) || !is_array($existingTeam)) {
+    //             continue;
+    //         }
+
+    //         $existingByInningsId = [];
+    //         foreach ($existingTeam as $k => $node) {
+    //             if (is_array($node) && isset($node['inningsId']) && is_numeric($node['inningsId'])) {
+    //                 $existingByInningsId[(string) $node['inningsId']] = [
+    //                     'key' => $k,
+    //                     'runs' => isset($node['runs']) && is_numeric($node['runs']) ? (int) $node['runs'] : null,
+    //                 ];
+    //             }
+    //         }
+
+    //         foreach ($latestTeam as $key => $node) {
+    //             if (!is_array($node) || !isset($node['inningsId']) || !is_numeric($node['inningsId'])) {
+    //                 $oldRuns = data_get($existingTeam, "$key.runs");
+    //                 $newRuns = data_get($latestTeam, "$key.runs");
+    //                 if (is_numeric($oldRuns) && is_numeric($newRuns) && (int) $newRuns < (int) $oldRuns) {
+    //                     data_set($latest, "matchScore.$teamKey.$key.runs", (int) $oldRuns);
+    //                     $this->log('matchscore_runs_preserved', 'info', 'No-drop clamp (fallback by key)', [
+    //                         'teamKey' => $teamKey,
+    //                         'key' => $key,
+    //                         'old_runs' => (int) $oldRuns,
+    //                         'incoming' => (int) $newRuns,
+    //                         'final_runs' => (int) $oldRuns,
+    //                     ]);
+    //                 }
+    //                 continue;
+    //             }
+
+    //             $inningsId = (string) $node['inningsId'];
+    //             if (!array_key_exists($inningsId, $existingByInningsId)) {
+    //                 continue;
+    //             }
+
+    //             $oldRuns = $existingByInningsId[$inningsId]['runs'];
+    //             $newRuns = isset($node['runs']) && is_numeric($node['runs']) ? (int) $node['runs'] : null;
+
+    //             if ($oldRuns === null || $newRuns === null)
+    //                 continue;
+
+    //             if ($newRuns < $oldRuns) {
+    //                 data_set($latest, "matchScore.$teamKey.$key.runs", (int) $oldRuns);
+    //                 $this->log('matchscore_runs_preserved', 'info', 'No-drop clamp (team+inningsId)', [
+    //                     'teamKey' => $teamKey,
+    //                     'inningsId' => (int) $inningsId,
+    //                     'old_runs' => (int) $oldRuns,
+    //                     'incoming' => (int) $newRuns,
+    //                     'final_runs' => (int) $oldRuns,
+    //                 ]);
+    //             }
+    //         }
+    //     }
+    //     return $latest;
+    // }
 }

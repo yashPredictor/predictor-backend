@@ -78,7 +78,7 @@ class SyncScorecards extends Command
             return self::SUCCESS;
         }
 
-        SyncScorecardJob::dispatch($matchIds, $runId);
+        SyncScorecardJob::dispatch($matchIds, $runId)->onQueue('scorecards');
 
         if (empty($matchIds)) {
             $message = 'Scorecard sync job queued for all live matches.';

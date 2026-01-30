@@ -77,7 +77,7 @@ class SyncSeriesSquads extends Command
             return self::SUCCESS;
         }
 
-        SyncSeriesSquadJob::dispatch($seriesIds, $runId);
+        SyncSeriesSquadJob::dispatch($seriesIds, $runId)->onQueue('series');
 
         if (empty($seriesIds)) {
             $message = 'Series squad sync job queued for eligible series within 30 days.';

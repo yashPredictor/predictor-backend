@@ -73,7 +73,7 @@ class SyncCommentary extends Command
             return self::SUCCESS;
         }
 
-        SyncCommentaryJob::dispatch($matchIds, $runId);
+        SyncCommentaryJob::dispatch($matchIds, $runId)->onQueue('commentary');
 
         if (empty($matchIds)) {
             $message = 'Commentary sync job queued for live matches.';

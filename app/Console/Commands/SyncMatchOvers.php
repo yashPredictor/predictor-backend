@@ -76,7 +76,7 @@ class SyncMatchOvers extends Command
             return self::SUCCESS;
         }
 
-        SyncMatchOversJob::dispatch($matchIds, $runId);
+        SyncMatchOversJob::dispatch($matchIds, $runId)->onQueue('overs');
 
         if (empty($matchIds)) {
             $message = 'Match overs sync job queued for all live matches.';

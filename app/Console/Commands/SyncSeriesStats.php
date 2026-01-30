@@ -78,7 +78,7 @@ class SyncSeriesStats extends Command
             return self::SUCCESS;
         }
 
-        SyncSeriesStatsJob::dispatch($matchIds, $seriesIds, $runId);
+        SyncSeriesStatsJob::dispatch($matchIds, $seriesIds, $runId)->onQueue('series');
 
         $messages = [];
         if (empty($matchIds) && empty($seriesIds)) {

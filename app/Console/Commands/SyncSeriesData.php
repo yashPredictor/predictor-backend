@@ -78,7 +78,7 @@ class SyncSeriesData extends Command
         }
 
         $runId = (string) Str::uuid();
-        SyncSeriesDataJob::dispatch($seriesIds, $matchIds, $runId);
+        SyncSeriesDataJob::dispatch($seriesIds, $matchIds, $runId)->onQueue('series');
 
         if ($this->output !== null) {
             $this->info("Series sync job queued. Run ID: {$runId}");

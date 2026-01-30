@@ -84,7 +84,14 @@ return [
     */
 
     'waits' => [
-        'redis:default' => 60,
+        'redis:live' => 60,
+        'redis:overs' => 60,
+        'redis:scorecards' => 60,
+        'redis:commentary' => 60,
+        'redis:squads' => 120,
+        'redis:series' => 300,
+        'redis:maintenance' => 300,
+        'redis:recent-matches' => 300,
     ],
 
     /*
@@ -184,33 +191,156 @@ return [
     */
 
     'defaults' => [
-        'supervisor-1' => [
+        'live-sync' => [
             'connection' => 'redis',
-            'queue' => ['default'],
+            'queue' => ['live'],
             'balance' => 'auto',
             'autoScalingStrategy' => 'time',
-            'maxProcesses' => 6,
+            'minProcesses' => 2,
+            'maxProcesses' => 8,
+            'balanceMaxShift' => 1,
+            'balanceCooldown' => 3,
             'maxTime' => 0,
             'maxJobs' => 0,
             'memory' => 256,
             'tries' => 1,
-            'timeout' => 60,
+            'timeout' => 660,
+            'nice' => 0,
+        ],
+        'overs-sync' => [
+            'connection' => 'redis',
+            'queue' => ['overs'],
+            'balance' => 'auto',
+            'autoScalingStrategy' => 'time',
+            'minProcesses' => 2,
+            'maxProcesses' => 8,
+            'balanceMaxShift' => 1,
+            'balanceCooldown' => 3,
+            'maxTime' => 0,
+            'maxJobs' => 0,
+            'memory' => 256,
+            'tries' => 1,
+            'timeout' => 660,
+            'nice' => 0,
+        ],
+        'scorecards-sync' => [
+            'connection' => 'redis',
+            'queue' => ['scorecards'],
+            'balance' => 'auto',
+            'autoScalingStrategy' => 'time',
+            'minProcesses' => 2,
+            'maxProcesses' => 8,
+            'balanceMaxShift' => 1,
+            'balanceCooldown' => 3,
+            'maxTime' => 0,
+            'maxJobs' => 0,
+            'memory' => 256,
+            'tries' => 1,
+            'timeout' => 660,
+            'nice' => 0,
+        ],
+        'commentary-sync' => [
+            'connection' => 'redis',
+            'queue' => ['commentary'],
+            'balance' => 'auto',
+            'autoScalingStrategy' => 'time',
+            'minProcesses' => 1,
+            'maxProcesses' => 4,
+            'balanceMaxShift' => 1,
+            'balanceCooldown' => 3,
+            'maxTime' => 0,
+            'maxJobs' => 0,
+            'memory' => 256,
+            'tries' => 1,
+            'timeout' => 660,
+            'nice' => 0,
+        ],
+        'support-sync' => [
+            'connection' => 'redis',
+            'queue' => ['squads', 'series', 'maintenance'],
+            'balance' => 'auto',
+            'autoScalingStrategy' => 'time',
+            'minProcesses' => 1,
+            'maxProcesses' => 3,
+            'balanceMaxShift' => 1,
+            'balanceCooldown' => 3,
+            'maxTime' => 0,
+            'maxJobs' => 0,
+            'memory' => 256,
+            'tries' => 1,
+            'timeout' => 4200,
+            'nice' => 0,
+        ],
+        'recent-matches-sync' => [
+            'connection' => 'redis',
+            'queue' => ['recent-matches'],
+            'balance' => 'auto',
+            'autoScalingStrategy' => 'time',
+            'minProcesses' => 1,
+            'maxProcesses' => 2,
+            'balanceMaxShift' => 1,
+            'balanceCooldown' => 3,
+            'maxTime' => 0,
+            'maxJobs' => 0,
+            'memory' => 256,
+            'tries' => 1,
+            'timeout' => 300,
             'nice' => 0,
         ],
     ],
 
     'environments' => [
         'production' => [
-            'supervisor-1' => [
+            'live-sync' => [
+                'minProcesses' => 3,
+                'maxProcesses' => 12,
+            ],
+            'overs-sync' => [
+                'minProcesses' => 3,
                 'maxProcesses' => 10,
-                'balanceMaxShift' => 1,
-                'balanceCooldown' => 3,
+            ],
+            'scorecards-sync' => [
+                'minProcesses' => 3,
+                'maxProcesses' => 10,
+            ],
+            'commentary-sync' => [
+                'minProcesses' => 2,
+                'maxProcesses' => 6,
+            ],
+            'support-sync' => [
+                'minProcesses' => 2,
+                'maxProcesses' => 6,
+            ],
+            'recent-matches-sync' => [
+                'minProcesses' => 1,
+                'maxProcesses' => 3,
             ],
         ],
 
         'local' => [
-            'supervisor-1' => [
+            'live-sync' => [
+                'minProcesses' => 1,
+                'maxProcesses' => 4,
+            ],
+            'overs-sync' => [
+                'minProcesses' => 1,
+                'maxProcesses' => 4,
+            ],
+            'scorecards-sync' => [
+                'minProcesses' => 1,
                 'maxProcesses' => 3,
+            ],
+            'commentary-sync' => [
+                'minProcesses' => 1,
+                'maxProcesses' => 3,
+            ],
+            'support-sync' => [
+                'minProcesses' => 1,
+                'maxProcesses' => 3,
+            ],
+            'recent-matches-sync' => [
+                'minProcesses' => 1,
+                'maxProcesses' => 2,
             ],
         ],
     ],

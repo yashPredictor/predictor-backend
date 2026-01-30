@@ -57,7 +57,6 @@ class SyncSeriesDataJob implements ShouldQueue
     public int $timeout = 3600;
 
     public int $tries = 5;
-
     public function __construct(
         private readonly array $seriesIds = [],
         private readonly array $matchIds = [],

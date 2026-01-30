@@ -34,8 +34,9 @@ class MoveEndedMatchesToRecentJob implements ShouldQueue
     private int $skipped = 0;
 
     public function __construct(
-        private readonly ?string $runId = null,
+        private ?string $runId = null,
     ) {
+        $this->onQueue('recent-matches');
     }
 
     /**
@@ -130,7 +131,7 @@ class MoveEndedMatchesToRecentJob implements ShouldQueue
             $query = $this->firestore
                 ->collection(self::MATCHES_COLLECTION)
                 ->where('matchInfo.enddate', '<=', $cutoff)
-                ->limit(200);
+                ->limit(500);
 
             $documents = $query->documents();
         } catch (Throwable $e) {
@@ -147,9 +148,22 @@ class MoveEndedMatchesToRecentJob implements ShouldQueue
             }
 
             $data = $snapshot->data();
+            $startDate = data_get($data, 'matchInfo.startdate');
+            $endDate = data_get($data, 'matchInfo.enddate');
             $stateLower = strtolower((string) (data_get($data, 'matchInfo.state_lowercase') ?? ''));
 
             if ($stateLower === 'complete') {
+                continue;
+            }
+
+            if (!is_numeric($startDate) || !is_numeric($endDate)) {
+                continue;
+            }
+
+            $startDate = (int) $startDate;
+            $endDate = (int) $endDate;
+
+            if ($endDate >= $startDate || $endDate > $cutoff) {
                 continue;
             }
 

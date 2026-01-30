@@ -72,7 +72,7 @@ class SyncSquadsPlayingXII extends Command
             return self::SUCCESS;
         }
 
-        SyncSquadsPlayingXIIJob::dispatch($matchIds, $runId);
+        SyncSquadsPlayingXIIJob::dispatch($matchIds, $runId)->onQueue('squads');
 
         if (empty($matchIds)) {
             $message = 'Squad sync job queued for all upcoming matches.';

@@ -30,7 +30,7 @@ class SyncRecentMatches extends Command
             return self::SUCCESS;
         }
 
-        MoveEndedMatchesToRecentJob::dispatch($runId);
+        MoveEndedMatchesToRecentJob::dispatch($runId)->onQueue('maintenance');
 
         $message = 'Recent matches sync job queued to promote completed matches into recent status.';
 
@@ -38,9 +38,9 @@ class SyncRecentMatches extends Command
             $this->info($message . " Run ID: {$runId}");
         }
 
-        // Log::info('SYNC-RECENT-MATCHES: ' . $message, [
-        //     'run_id' => $runId,
-        // ]);
+        Log::info('SYNC-RECENT-MATCHES: ' . $message, [
+            'run_id' => $runId,
+        ]);
 
         return self::SUCCESS;
     }

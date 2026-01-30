@@ -76,7 +76,7 @@ class SyncSeriesVenues extends Command
             return self::SUCCESS;
         }
 
-        SyncSeriesVenuesJob::dispatch($seriesIds, $runId);
+        SyncSeriesVenuesJob::dispatch($seriesIds, $runId)->onQueue('series');
 
         if (empty($seriesIds)) {
             $message = 'Series venues sync job queued for upcoming series within 30 days.';

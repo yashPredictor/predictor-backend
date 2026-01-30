@@ -76,7 +76,7 @@ class SyncLiveMatches extends Command
             return self::SUCCESS;
         }
 
-        SyncLiveMatchesJob::dispatch($matchIds, $runId);
+        SyncLiveMatchesJob::dispatch($matchIds, $runId)->onQueue('live');
 
         if (empty($matchIds)) {
             $message = 'Live matches sync job queued for all live matches.';
